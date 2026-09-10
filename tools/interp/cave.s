@@ -691,9 +691,9 @@ pdraw_sh_hook:
     lea   rax, [rip+_start+(PDRAW_SH-BASE)]
 pdraw_common:
     push  rbx
-    sub   rsp, 0x30
+    sub   rsp, 0x40                     # +0x20 flag, +0x24 saved x, +0x28 saved y, +0x30 original draw
     mov   rbx, rcx
-    mov   [rsp+0x28], rax               # original draw
+    mov   [rsp+0x30], rax               # original draw
     mov   dword ptr [rsp+0x20], 0       # 1 = adjusted
     cmp   dword ptr [rip+g_indraw], 0
     je    1f
@@ -702,7 +702,7 @@ pdraw_common:
     mov   eax, [rbx+0xb8]
     mov   [rsp+0x24], eax               # saved draw x
     mov   eax, [rbx+0xbc]
-    mov   [rsp+0x2c], eax               # saved draw y (reuse slot high half is fine: separate dword)
+    mov   [rsp+0x28], eax               # saved draw y
     movss xmm0, dword ptr [rip+g_alpha]
     movss xmm1, dword ptr [rbx+0x58]
     mulss xmm1, xmm0
@@ -713,13 +713,13 @@ pdraw_common:
     addss xmm1, dword ptr [rbx+0xbc]
     movss dword ptr [rbx+0xbc], xmm1
     mov   dword ptr [rsp+0x20], 1
-1:  call  qword ptr [rsp+0x28]
+1:  call  qword ptr [rsp+0x30]
     cmp   dword ptr [rsp+0x20], 0
     je    2f
     mov   eax, [rsp+0x24]
     mov   [rbx+0xb8], eax
-    mov   eax, [rsp+0x2c]
+    mov   eax, [rsp+0x28]
     mov   [rbx+0xbc], eax
-2:  add   rsp, 0x30
+2:  add   rsp, 0x40
     pop   rbx
     ret
