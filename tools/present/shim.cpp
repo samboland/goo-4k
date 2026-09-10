@@ -82,6 +82,7 @@ static ID3D11Texture2D*     g_shared = nullptr;   // GL renders into this via in
 static HANDLE g_interop = nullptr, g_sharedH = nullptr;
 static GLuint g_tex = 0, g_fbo = 0;
 static unsigned g_frames = 0;
+static bool g_overlay = true;
 static double   g_cap_period = 0;      // seconds per frame when fps_cap is set
 static LARGE_INTEGER g_qpf = {}, g_last_present = {};
 
@@ -115,7 +116,6 @@ static void wait_for_cap() {
 }
 
 // ---- build stamp overlay (Direct2D on the shared texture)
-static bool g_overlay = true;
 static ID2D1Factory* g_d2d = nullptr;
 static IDWriteFactory* g_dw = nullptr;
 static IDWriteTextFormat* g_fmt = nullptr;
@@ -169,7 +169,7 @@ static void overlay_draw() {
     if (!g_rt || !g_fmt || !g_brush) return;
     g_rt->BeginDraw();
     D2D1_RECT_F rc = D2D1::RectF(12.0f, 8.0f, 1400.0f, 40.0f);
-    g_rt->DrawTextW(g_text, (UINT32)wcslen(g_text), g_fmt, rc, g_brush);
+    g_rt->DrawText(g_text, (UINT32)wcslen(g_text), g_fmt, rc, g_brush);
     g_rt->EndDraw();
 }
 
