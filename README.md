@@ -118,6 +118,12 @@ docs/ENGINE.md   reverse-engineering notes and addresses
   64 MB texture. Expect roughly 1 GB of VRAM in busy levels.
 - The patches are byte-exact for build 20824155. A game update needs new offsets.
 
+## License
+
+MIT, see `LICENSE`. It covers the tools, patches, shim and documentation in this repository.
+World of Goo, its engine and its art belong to 2D Boy and Tomorrow Corporation and are not
+covered; the texture pack is a derivative of their art and is distributed separately.
+
 ## Credits
 
 World of Goo by 2D Boy; the remaster by Tomorrow Corporation. Upscaling model:
