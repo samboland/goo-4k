@@ -86,6 +86,9 @@ static bool g_overlay = true;
 static double   g_cap_period = 0;      // seconds per frame when fps_cap is set
 static LARGE_INTEGER g_qpf = {}, g_last_present = {};
 
+static int g_interp_flags = -1;       // ini: interp=<mask>; -1 leaves the exe default (all on)
+static void apply_flags();
+
 // goopresent.ini next to the config: fps_cap=<n> (0 = off). Env GOO_FPS_CAP overrides.
 static void read_settings() {
     double cap = 0;
@@ -137,7 +140,6 @@ static BYTE* find_goo_marker(const char* marker) {
     }
     return nullptr;
 }
-static int g_interp_flags = -1;       // ini: interp=<mask>; -1 leaves the exe default (all on)
 static void apply_flags() {
     BYTE* m = find_goo_marker("GOO4KFLAGS");
     if (!m) { logf("no GOO4KFLAGS marker in exe"); return; }
