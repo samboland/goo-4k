@@ -183,16 +183,29 @@ time_hook:                          # rcx = Wog -> xmm0 seconds
     push  rbx
     sub   rsp, 0x20
     mov   rbx, rcx
+    xor   r9d, r9d                      # r9d = 1 when the caller is an animation site that may see the advanced clock
+    mov   rax, [rsp+0x28]               # return address of the original call
+    mov   r8, 0x14001f45b               # scene object draw: animation apply
+    cmp   rax, r8
+    je    2f
+    mov   r8, 0x14001f499
+    cmp   rax, r8
+    je    2f
+    mov   r8, 0x14002b1b0               # image drawable keyframe time
+    cmp   rax, r8
+    jne   3f
+2:  mov   r9d, 1
+3:
     call  _start+(ENV_GET-BASE)
     mov   rcx, rax
     mov   rax, [rax]
     call  qword ptr [rax+0x58]          # ups
     cvtsi2ss xmm1, eax
     movss xmm0, dword ptr [rbx+0x54]
+    test  r9d, r9d
+    jz    1f
     cmp   dword ptr [rip+g_indraw], 0
     je    1f
-    cmp   dword ptr [rip+g_noclock], 0
-    jne   1f
     test  dword ptr [rip+g_flags], 2
     jz    1f
     addss xmm0, dword ptr [rip+g_alpha]
