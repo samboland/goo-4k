@@ -21,6 +21,8 @@
 .set IAT_QPF,    0x1402ae240    # kernel32 QueryPerformanceFrequency
 .set ANIM_EVAL,  0x140029e10    # ImageAnimation evaluate(anim, float t, float t0, graphics); prologue relocated
 .set ANIM_BACK,  0x140029e1b
+.set PDRAW,      0x14006d8c0    # Particle draw (vtable +0x58) for Particle and SuckEffectParticle
+.set PDRAW_SH,   0x14007ed40    # ShatterParticle draw (vtable +0x58)
 .set BASE, 0x140398000
 .set ENTRY_SHIFT, 17            # 4096 bodies * 32 bytes per world slot
 .text
@@ -673,5 +675,51 @@ fx_hook:                            # rcx=renderer rdx=graphics r8=camera
     call  _start+(REND_FX-BASE)
     mov   dword ptr [rip+g_noclock], 0
     add   rsp, 0x20
+    pop   rbx
+    ret
+
+# ---------------------------------------------------------------- particle draw wrappers
+# rcx=particle rdx=graphics r8=camera xmm3=scale. Particles move by velocity (+0x58/+0x5c, px per
+# tick) once per tick; while drawing, push the draw position (+0xb8/+0xbc) forward by velocity
+# times the frame fraction, call the stock draw, restore. Feature bit 32.
+.globl pdraw_hook
+pdraw_hook:
+    lea   rax, [rip+_start+(PDRAW-BASE)]
+    jmp   pdraw_common
+.globl pdraw_sh_hook
+pdraw_sh_hook:
+    lea   rax, [rip+_start+(PDRAW_SH-BASE)]
+pdraw_common:
+    push  rbx
+    sub   rsp, 0x30
+    mov   rbx, rcx
+    mov   [rsp+0x28], rax               # original draw
+    mov   dword ptr [rsp+0x20], 0       # 1 = adjusted
+    cmp   dword ptr [rip+g_indraw], 0
+    je    1f
+    test  dword ptr [rip+g_flags], 32
+    jz    1f
+    mov   eax, [rbx+0xb8]
+    mov   [rsp+0x24], eax               # saved draw x
+    mov   eax, [rbx+0xbc]
+    mov   [rsp+0x2c], eax               # saved draw y (reuse slot high half is fine: separate dword)
+    movss xmm0, dword ptr [rip+g_alpha]
+    movss xmm1, dword ptr [rbx+0x58]
+    mulss xmm1, xmm0
+    addss xmm1, dword ptr [rbx+0xb8]
+    movss dword ptr [rbx+0xb8], xmm1
+    movss xmm1, dword ptr [rbx+0x5c]
+    mulss xmm1, xmm0
+    addss xmm1, dword ptr [rbx+0xbc]
+    movss dword ptr [rbx+0xbc], xmm1
+    mov   dword ptr [rsp+0x20], 1
+1:  call  qword ptr [rsp+0x28]
+    cmp   dword ptr [rsp+0x20], 0
+    je    2f
+    mov   eax, [rsp+0x24]
+    mov   [rbx+0xb8], eax
+    mov   eax, [rsp+0x2c]
+    mov   [rbx+0xbc], eax
+2:  add   rsp, 0x30
     pop   rbx
     ret
