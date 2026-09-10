@@ -80,6 +80,37 @@ static ID3D11Texture2D*     g_shared = nullptr;   // GL renders into this via in
 static HANDLE g_interop = nullptr, g_sharedH = nullptr;
 static GLuint g_tex = 0, g_fbo = 0;
 static unsigned g_frames = 0;
+static double   g_cap_period = 0;      // seconds per frame when fps_cap is set
+static LARGE_INTEGER g_qpf = {}, g_last_present = {};
+
+// goopresent.ini next to the config: fps_cap=<n> (0 = off). Env GOO_FPS_CAP overrides.
+static void read_settings() {
+    double cap = 0;
+    char path[MAX_PATH]; DWORD n = GetEnvironmentVariableA("LOCALAPPDATA", path, MAX_PATH);
+    if (n && n < MAX_PATH) {
+        strcat_s(path, "\\2DBoy\\WorldOfGoo\\goopresent.ini");
+        if (FILE* f = fopen(path, "r")) { char line[256]; while (fgets(line, sizeof line, f)) { double v; if (sscanf(line, " fps_cap = %lf", &v) == 1 || sscanf(line, " fps_cap=%lf", &v) == 1) cap = v; } fclose(f); }
+    }
+    if (const char* e = getenv("GOO_FPS_CAP")) cap = atof(e);
+    g_cap_period = cap > 0 ? 1.0 / cap : 0;
+    QueryPerformanceFrequency(&g_qpf);
+    logf("fps_cap=%.1f", cap);
+}
+
+static void wait_for_cap() {
+    if (g_cap_period <= 0) return;
+    LARGE_INTEGER now; QueryPerformanceCounter(&now);
+    if (g_last_present.QuadPart) {
+        double target = g_last_present.QuadPart + g_cap_period * g_qpf.QuadPart;
+        for (;;) {
+            QueryPerformanceCounter(&now);
+            double remaining = (target - now.QuadPart) / (double)g_qpf.QuadPart;
+            if (remaining <= 0) break;
+            if (remaining > 0.002) Sleep(1); else YieldProcessor();
+        }
+    }
+    g_last_present = now;
+}
 
 static void destroy_shared() {
     if (g_sharedH) { p_wglDXUnregisterObjectNV(g_interop, g_sharedH); g_sharedH = nullptr; }
@@ -185,6 +216,7 @@ static void present_frame() {
     if (SUCCEEDED(g_sc->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&bb))) {
         g_ctx->CopyResource(bb, g_shared); bb->Release();
     }
+    wait_for_cap();
     UINT sync = (g_interval == 0) ? 0 : 1;
     UINT flags = (sync == 0 && g_tearing) ? DXGI_PRESENT_ALLOW_TEARING : 0;
     HRESULT hr = g_sc->Present(sync, flags);
@@ -197,7 +229,7 @@ extern "C" {
 __declspec(dllexport) void SDL_GL_SwapWindow(SDL_Window* win) {
     load_real();
     if (getenv("GOO_PRESENT_OFF")) g_disabled = true;
-    if (!g_disabled && !g_inited) { g_inited = true; if (!init_present()) { g_disabled = true; logf("present disabled, using GL swap"); } }
+    if (!g_disabled && !g_inited) { g_inited = true; read_settings(); if (!init_present()) { g_disabled = true; logf("present disabled, using GL swap"); } }
     if (g_disabled) { if (real_SwapWindow) real_SwapWindow(win); return; }
     present_frame();
 }
