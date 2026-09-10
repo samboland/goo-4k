@@ -45,3 +45,18 @@ Variants in work/sandbox/Win64: `WorldOfGoo-ups100.exe`, `WorldOfGoo-ups250.exe`
 ## Upscale test
 
 work/test-set-01: ten assets through ui-redraw `upscalingtest_01.chn` (StarSample 2x) and `upscalingtest_02.chn` (PBRify 4x DAT2) at forced 2x. Review: work/test-set-01/compare.html. Runner: tools/run_chain_batch.py (adds `--scale`, resolves passthrough nodes). Backend: chaiNNer python `run.py 8767 --storage-dir work/backend`.
+
+### Render interpolation (tools/interp) - current approach
+
+The high-tick-rate approach broke every per-call controller (walking goo, camera, cursor spring at 5x) and the chapter card (5x slow). Replaced by interpolation: simulation and tick rate stay stock.
+
+`build.py SRC DST` appends an RWX section `.goo` at 0x140398000 with `cave.s` and installs:
+
+- five `Scene::tick` call sites -> `tramp`: records the scene's world for this tick and copies every body's cached position (+0x28/+0x2c) and rotation (+0x30) into a 1 MB buffer (8 worlds x 4096 bodies x 32 bytes, allocated with the game's operator new on first use).
+- `Wog::vftable+0x30` -> `tick_hook`: clears the world list, stores QueryPerformanceCounter, snapshots the level camera position (+0x18/+0x1c).
+- `WogRenderer::vftable+8` -> `draw_hook`: alpha = (now - tick) * 50 / freq clamped to [0,1]; writes prev + (cur - prev) * alpha into every body still at its snapshot slot, the camera, and the live mouse position into each cursor head sample; sets the positionable dirty byte; calls the stock draw; restores everything.
+- `Wog::time` (`FUN_14008a920`) start -> `jmp time_hook`: same formula as stock, plus alpha ticks while inside draw, so clock-driven animations (SinAnim text) advance per frame.
+
+Layout facts used: PhysBoy::Body has a BoyLib::Positionable at +0x10 (dirty +0x18, local pos +0x28/+0x2c, rotation +0x30, parent +0x38); World body list at world+0x10, count at world+0x8010; Scene world at scene+0xe0; Camera is a Positionable at +0 (dirty +8, pos +0x18/+0x1c, zoom +0xb8); Model::getCamera = `FUN_140057870`.
+
+Output: work/sandbox/Win64/WorldOfGoo-interp.exe. Runs past the intro; gameplay not yet verified.
