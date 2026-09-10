@@ -87,6 +87,7 @@ static double   g_cap_period = 0;      // seconds per frame when fps_cap is set
 static LARGE_INTEGER g_qpf = {}, g_last_present = {};
 
 static int g_interp_flags = -1;       // ini: interp=<mask>; -1 leaves the exe default (all on)
+static bool g_debug_keys = false;     // ini: debug=1 enables F5
 static void apply_flags();
 
 // goopresent.ini next to the config: fps_cap=<n> (0 = off). Env GOO_FPS_CAP overrides.
@@ -95,7 +96,7 @@ static void read_settings() {
     char path[MAX_PATH]; DWORD n = GetEnvironmentVariableA("LOCALAPPDATA", path, MAX_PATH);
     if (n && n < MAX_PATH) {
         strcat_s(path, "\\2DBoy\\WorldOfGoo\\goopresent.ini");
-        if (FILE* f = fopen(path, "r")) { char line[256]; while (fgets(line, sizeof line, f)) { double v; int o; if (sscanf(line, " fps_cap = %lf", &v) == 1 || sscanf(line, " fps_cap=%lf", &v) == 1) cap = v; if (sscanf(line, " overlay = %d", &o) == 1 || sscanf(line, " overlay=%d", &o) == 1) g_overlay = o != 0; if (sscanf(line, " interp = %d", &o) == 1 || sscanf(line, " interp=%d", &o) == 1) g_interp_flags = o; } fclose(f); }
+        if (FILE* f = fopen(path, "r")) { char line[256]; while (fgets(line, sizeof line, f)) { double v; int o; if (sscanf(line, " fps_cap = %lf", &v) == 1 || sscanf(line, " fps_cap=%lf", &v) == 1) cap = v; if (sscanf(line, " overlay = %d", &o) == 1 || sscanf(line, " overlay=%d", &o) == 1) g_overlay = o != 0; if (sscanf(line, " interp = %d", &o) == 1 || sscanf(line, " interp=%d", &o) == 1) g_interp_flags = o; if (sscanf(line, " debug = %d", &o) == 1 || sscanf(line, " debug=%d", &o) == 1) g_debug_keys = o != 0; } fclose(f); }
     }
     if (const char* e = getenv("GOO_FPS_CAP")) cap = atof(e);
     g_cap_period = cap > 0 ? 1.0 / cap : 0;
@@ -143,6 +144,7 @@ static BYTE* find_goo_marker(const char* marker) {
 static DWORD* g_debug_word = nullptr;
 static bool g_f5_down = false;
 static void poll_debug_keys() {
+    if (!g_debug_keys) return;
     if (!g_debug_word) { BYTE* m = find_goo_marker("GOO4KDEBUG"); if (!m) return; g_debug_word = (DWORD*)(m + 12); }
     if (*g_debug_word >= 2) { logf("debug burst result %lu (2 no camera, 3 create failed, 4 created only, 5 added to scene)", *g_debug_word); *g_debug_word = 0; }
     bool down = (GetAsyncKeyState(VK_F5) & 0x8000) != 0;

@@ -23,4 +23,5 @@ Options (file %LOCALAPPDATA%\2DBoy\WorldOfGoo\goopresent.ini, one per line)
   fps_cap=236     frame cap (VRR setups); 0 or absent = none
   overlay=1       show the build stamp at the top left
   interp=31       bitmask of interpolation features (1 bodies, 2 clock, 4 anims, 8 camera, 16 cursor)
+  debug=1         enables F5, which spawns an unlock-burst effect at the camera (testing aid)
 Log: %LOCALAPPDATA%\2DBoy\WorldOfGoo\goopresent.log
