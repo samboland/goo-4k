@@ -2,3 +2,4 @@ work/
 *.exe
 *.dll
 __pycache__/
+dist/
