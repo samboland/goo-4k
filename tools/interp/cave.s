@@ -13,6 +13,8 @@
 .set OP_NEW,     0x140271874    # operator new(size)
 .set IAT_QPC,    0x1402ae238    # kernel32 QueryPerformanceCounter
 .set IAT_QPF,    0x1402ae240    # kernel32 QueryPerformanceFrequency
+.set ANIM_EVAL,  0x140029e10    # ImageAnimation evaluate(anim, float t, float t0, graphics); prologue relocated
+.set ANIM_BACK,  0x140029e1b
 .set BASE, 0x140398000
 .set ENTRY_SHIFT, 17            # 4096 bodies * 32 bytes per world slot
 .text
@@ -33,6 +35,12 @@ g_cam_prev:  .float 0,0
 g_cam_save:  .float 0,0
 g_cur_ptr:   .fill 4,8,0
 g_cur_save:  .fill 8,4,0
+g_tick:      .long 0
+g_anim_n:    .long 0
+g_anim_max:  .float 1.0        # ignore rate jumps larger than this per tick (loop wraps)
+             .long 0
+.p2align 4
+g_anim:      .space 8192         # 256 x {anim ptr, last t, prev t, tick_last, tick_prev, pad}
 .p2align 4
 
 # ---------------------------------------------------------------- Scene::tick hook
@@ -127,6 +135,7 @@ tick_hook:                          # rcx = Wog
     sub   rsp, 0x20
     mov   rbx, rcx
     mov   dword ptr [rip+g_nworlds], 0
+    inc   dword ptr [rip+g_tick]
     lea   rcx, [rip+g_qpc_tick]
     call  qword ptr [rip+_start+(IAT_QPC-BASE)]
     mov   qword ptr [rip+g_cam], 0
@@ -418,3 +427,67 @@ rwdone:
     pop   rsi
     pop   rbx
     ret
+
+# ---------------------------------------------------------------- keyframe evaluator detour
+# Entered from the jmp at ANIM_EVAL. rcx=anim, xmm1=t (per-tick progress). While drawing,
+# extrapolate t by the frame fraction times the rate observed between the last two ticks.
+.globl anim_hook
+anim_hook:
+    cmp   dword ptr [rip+g_indraw], 0
+    je    anim_out
+    lea   r10, [rip+g_anim]
+    mov   r11d, dword ptr [rip+g_anim_n]
+    xor   eax, eax
+1:  cmp   eax, r11d
+    jae   anim_new
+    cmp   rcx, [r10]
+    je    anim_found
+    add   r10, 32
+    inc   eax
+    jmp   1b
+anim_new:
+    cmp   r11d, 256
+    jae   anim_out
+    inc   dword ptr [rip+g_anim_n]
+    mov   [r10], rcx
+    movss dword ptr [r10+8], xmm1
+    movss dword ptr [r10+12], xmm1
+    mov   eax, dword ptr [rip+g_tick]
+    mov   [r10+16], eax
+    mov   [r10+20], eax
+    jmp   anim_out
+anim_found:
+    ucomiss xmm1, dword ptr [r10+8]
+    jp    2f
+    je    3f
+2:  mov   eax, [r10+8]                  # value changed: shift history
+    mov   [r10+12], eax
+    mov   eax, [r10+16]
+    mov   [r10+20], eax
+    movss dword ptr [r10+8], xmm1
+    mov   eax, dword ptr [rip+g_tick]
+    mov   [r10+16], eax
+3:  mov   eax, dword ptr [rip+g_tick]
+    cmp   eax, [r10+16]
+    jne   anim_out                      # did not change in the latest tick: hold
+    mov   eax, [r10+16]
+    sub   eax, [r10+20]
+    jle   anim_out
+    cvtsi2ss xmm5, eax
+    movss xmm4, dword ptr [r10+8]
+    subss xmm4, dword ptr [r10+12]
+    divss xmm4, xmm5                    # rate per tick
+    movaps xmm5, xmm4
+    andps xmm5, xmmword ptr [rip+g_absmask]
+    ucomiss xmm5, dword ptr [rip+g_anim_max]
+    ja    anim_out                      # loop wrap or reset: hold
+    mulss xmm4, dword ptr [rip+g_alpha]
+    addss xmm1, xmm4
+anim_out:
+    push  rbx                           # relocated prologue of ANIM_EVAL
+    push  rbp
+    push  rdi
+    sub   rsp, 0x90
+    jmp   _start+(ANIM_BACK-BASE)
+.p2align 4
+g_absmask:   .long 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff
