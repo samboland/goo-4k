@@ -59,7 +59,7 @@ The high-tick-rate approach broke every per-call controller (walking goo, camera
 
 Layout facts used: PhysBoy::Body has a BoyLib::Positionable at +0x10 (dirty +0x18, local pos +0x28/+0x2c, rotation +0x30, parent +0x38); World body list at world+0x10, count at world+0x8010; Scene world at scene+0xe0; Camera is a Positionable at +0 (dirty +8, pos +0x18/+0x1c, zoom +0xb8); Model::getCamera = `FUN_140057870`.
 
-Output: work/sandbox/Win64/WorldOfGoo-interp.exe. Runs past the intro; gameplay not yet verified.
+Output: work/sandbox/Win64/WorldOfGoo.exe (builder input is work/WorldOfGoo-scaleonly.exe). Runs past the intro; gameplay not yet verified.
 
 ### Two-suffix loader (in tools/interp/build.py)
 
