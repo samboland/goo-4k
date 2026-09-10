@@ -60,3 +60,17 @@ The high-tick-rate approach broke every per-call controller (walking goo, camera
 Layout facts used: PhysBoy::Body has a BoyLib::Positionable at +0x10 (dirty +0x18, local pos +0x28/+0x2c, rotation +0x30, parent +0x38); World body list at world+0x10, count at world+0x8010; Scene world at scene+0xe0; Camera is a Positionable at +0 (dirty +8, pos +0x18/+0x1c, zoom +0xb8); Model::getCamera = `FUN_140057870`.
 
 Output: work/sandbox/Win64/WorldOfGoo-interp.exe. Runs past the intro; gameplay not yet verified.
+
+### Two-suffix loader (in tools/interp/build.py)
+
+The loader string `@2x.png` at 0x1402b8370 is rewritten to `@4x.png`; the three `.png` fallback references (0x1400bb34b, 0x1400bb79a, 0x1400bb97d) point at a `@2x.png` string in the `.goo` section and their two length immediates go 4 -> 7. Scale: flagged path 0.25 (patched earlier), fallback path 0.5 (0x1400d7c77 now reads `DAT_1402af500`). Net effect: `name@4x.png` if present, else stock `name@2x.png`. The mod is additive; stock files untouched. Sidecar `.png.txt` files are duplicated for `@4x` names by tools/install_4x.py.
+
+### Asset batch (2026-09-10)
+
+Decision (Sam): StarSample 2x on all 2123 files first, then a second pass only where it shows. Chain: ui-redraw `upscalingtest_01.chn` as modified by Sam (alpha no longer processed separately; merge_transparency is passthrough; final node is the mean curvature blur `0f842cdc-311e-4504-8fda-514b1eda2f9e`). Snapshot in work/batch-all/chain-starsample-2x.chn.
+
+- Inputs: work/batch-all/inputs, flat, path segments joined by `__`, `@2x` suffix stripped.
+- Run: `chaiNNer python tools/run_chain_batch.py --chain ... --inputs ... --output work/batch-all/out --settings work/backend-settings.json --scale 2 --tile-size 256 --final-node 0f842cdc-...` (backend on 8767). Log work/batch-all/run.log, progress work/batch-all/out/report.json, resumable with --resume.
+- Install: `python tools/install_4x.py work/batch-all/out work/sandbox/game/res` (idempotent).
+
+Open item: possible stray particles on the map's level-complete goo eruption under the interpolation build. Compare against stock later.
