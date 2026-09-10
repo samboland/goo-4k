@@ -446,6 +446,9 @@ rwdone:
 anim_hook:
     cmp   dword ptr [rip+g_indraw], 0
     je    anim_out
+    mov   rax, 0x140003762              # particle effect draw: per-particle anims churn, no interpolation
+    cmp   [rsp], rax
+    je    anim_out
     lea   r10, [rip+g_anim]
     mov   r11d, dword ptr [rip+g_anim_n]
     xor   eax, eax
