@@ -15,6 +15,8 @@
 .set FX_FACTORY, 0x140017690    # EffectsFactory* ()
 .set FX_CREATE,  0x1400175d0    # Effect* (factory, string* outId, string* name, float depth)
 .set VEC2_VT,    0x1402aea48    # BoyLib::Vector2::vftable
+.set MODEL_LEVEL, 0x140057a30   # Level* (Model)
+.set SCENE_ADD,  0x140098870    # Scene::addObject(scene, object)
 .set IAT_QPC,    0x1402ae238    # kernel32 QueryPerformanceCounter
 .set IAT_QPF,    0x1402ae240    # kernel32 QueryPerformanceFrequency
 .set ANIM_EVAL,  0x140029e10    # ImageAnimation evaluate(anim, float t, float t0, graphics); prologue relocated
@@ -180,9 +182,8 @@ tick_hook:                          # rcx = Wog
     mov   dword ptr [rip+g_cam_prev], ecx
     mov   ecx, [rax+0x1c]
     mov   dword ptr [rip+g_cam_prev+4], ecx
-1:  cmp   dword ptr [rip+g_debug], 0
-    je    5f
-    mov   dword ptr [rip+g_debug], 0
+1:  cmp   dword ptr [rip+g_debug], 1
+    jne   5f
     call  debug_burst
 5:  mov   rcx, rbx
     add   rsp, 0x20
@@ -194,6 +195,7 @@ debug_burst:
     push  rsi
     push  rdi
     sub   rsp, 0x88                     # locals: name string +0x20, out string +0x40, vec +0x60
+    mov   dword ptr [rip+g_debug], 2    # status: no camera
     mov   rax, [rip+g_cam]
     test  rax, rax
     jz    9f
@@ -214,18 +216,33 @@ debug_burst:
     lea   rdx, [rsp+0x40]
     lea   r8, [rsp+0x20]
     movss xmm3, dword ptr [rip+g_one]
+    mov   dword ptr [rip+g_debug], 3    # status: create failed
     call  _start+(FX_CREATE-BASE)
     test  rax, rax
     jz    9f
+    mov   dword ptr [rip+g_debug], 4    # status: spawned
     mov   rcx, VEC2_VT
     mov   [rsp+0x60], rcx
     mov   [rsp+0x68], esi
     mov   [rsp+0x6c], edi
     mov   dword ptr [rax+0x100], 0x1e
+    mov   [rsp+0x70], rax               # effect
     mov   rcx, rax
     lea   rdx, [rsp+0x60]
     mov   rax, [rax]
     call  qword ptr [rax+0x20]          # setPosition(vec)
+    mov   rcx, [rbx+0x10]               # Model
+    test  rcx, rcx
+    jz    9f
+    call  _start+(MODEL_LEVEL-BASE)
+    test  rax, rax
+    jz    9f
+    mov   rcx, [rax+0x178]              # level main scene
+    test  rcx, rcx
+    jz    9f
+    mov   rdx, [rsp+0x70]
+    call  _start+(SCENE_ADD-BASE)       # what EffectLauncher::tick does
+    mov   dword ptr [rip+g_debug], 5    # status: added to scene
 9:  add   rsp, 0x88
     pop   rdi
     pop   rsi

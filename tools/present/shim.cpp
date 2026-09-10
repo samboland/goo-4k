@@ -144,6 +144,7 @@ static DWORD* g_debug_word = nullptr;
 static bool g_f5_down = false;
 static void poll_debug_keys() {
     if (!g_debug_word) { BYTE* m = find_goo_marker("GOO4KDEBUG"); if (!m) return; g_debug_word = (DWORD*)(m + 12); }
+    if (*g_debug_word >= 2) { logf("debug burst result %lu (2 no camera, 3 create failed, 4 created only, 5 added to scene)", *g_debug_word); *g_debug_word = 0; }
     bool down = (GetAsyncKeyState(VK_F5) & 0x8000) != 0;
     if (down && !g_f5_down) { *g_debug_word = 1; logf("F5: debug burst"); }
     g_f5_down = down;
