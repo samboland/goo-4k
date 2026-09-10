@@ -55,7 +55,7 @@ SCENE_TICK=0x14009af30
 for s in (0x14004ea6e,0x14004ea9f,0x140061597,0x1400615cf,0x140061d9a):
     o=va2off(s); assert d[o]==0xe8 and struct.unpack_from('<i',d,o+1)[0]+s+5==SCENE_TICK, hex(s)
     struct.pack_into('<i',d,o+1,syms['tramp']-(s+5))
-for slot,orig,new in ((0x1402b5af0+0x30,0x14008f3f0,'tick_hook'),(0x1402b5f38+0x8,0x1400933c0,'draw_hook')):
+for slot,orig,new in ((0x1402b5af0+0x30,0x14008f3f0,'tick_hook'),(0x1402b5f38+0x8,0x1400933c0,'draw_hook'),(0x1402b5f38+0x10,0x140094480,'fx_hook')):
     o=va2off(slot); assert struct.unpack_from('<Q',d,o)[0]==orig, hex(slot)
     struct.pack_into('<Q',d,o,syms[new])
 jmp_patch(0x14008a920,'40534883ec20',syms['time_hook'])                 # Wog::time, fully replaced

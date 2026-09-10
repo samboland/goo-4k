@@ -6,6 +6,7 @@
 .set SCENE_TICK, 0x14009af30    # Scene::tick(scene, float time, float dt, bool)
 .set WOG_TICK,   0x14008f3f0    # Wog::tick (Wog::vftable+0x30)
 .set REND_DRAW,  0x1400933c0    # WogRenderer::draw(renderer, graphics) (vftable+8)
+.set REND_FX,    0x140094480    # WogRenderer effects pass (vftable+0x10): particles read the clock, keep it tick-exact
 .set WOG_GET,    0x14008c9c0    # Wog* ()
 .set ENV_GET,    0x1400972a0    # Boy::Environment* ()
 .set MODEL_CAM,  0x140057870    # Camera* (Model)   current level scene camera
@@ -43,6 +44,7 @@ g_flagmark:  .asciz "GOO4KFLAGS"
              .byte 0
 g_flags:     .long 0xffffffff   # 1 bodies, 2 clock, 4 keyframe anims, 8 camera, 16 cursor (shim writes from ini)
 g_tick:      .long 0
+g_noclock:   .long 0
 g_anim_n:    .long 0
 g_anim_max:  .float 0.15       # ignore time jumps larger than this per tick (restarts, loop wraps)
 g_body_max:  .float 200.0      # skip body lerp when it moved more than this in one tick (slot reuse)
@@ -189,6 +191,8 @@ time_hook:                          # rcx = Wog -> xmm0 seconds
     movss xmm0, dword ptr [rbx+0x54]
     cmp   dword ptr [rip+g_indraw], 0
     je    1f
+    cmp   dword ptr [rip+g_noclock], 0
+    jne   1f
     test  dword ptr [rip+g_flags], 2
     jz    1f
     addss xmm0, dword ptr [rip+g_alpha]
@@ -575,3 +579,15 @@ anim_out:
     jmp   _start+(ANIM_BACK-BASE)
 .p2align 4
 g_absmask:   .long 0x7fffffff, 0x7fffffff, 0x7fffffff, 0x7fffffff
+
+# ---------------------------------------------------------------- effects pass wrapper
+.globl fx_hook
+fx_hook:                            # rcx=renderer rdx=graphics r8=camera
+    push  rbx
+    sub   rsp, 0x20
+    mov   dword ptr [rip+g_noclock], 1
+    call  _start+(REND_FX-BASE)
+    mov   dword ptr [rip+g_noclock], 0
+    add   rsp, 0x20
+    pop   rbx
+    ret
