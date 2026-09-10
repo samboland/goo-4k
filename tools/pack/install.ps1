@@ -105,7 +105,8 @@ if (-not $NoTextures -and (Test-Path $tex)) {
     }
     Set-Content (Join-Path $backup 'installed-textures.txt') $list
     Write-Host "  textures: $n files installed"
-} else { Write-Host "  textures: none found next to the installer (put the texture pack's 'textures' folder here), skipped" }
+} elseif ($NoTextures) { Write-Host "  textures: skipped" }
+else { Write-Host "  textures: none found next to the installer (put the texture pack's 'textures' folder here), skipped" }
 
 $cfg = Join-Path $cfgDir 'config.ini'
 if (Test-Path $cfg) {

@@ -34,10 +34,12 @@ irm https://raw.githubusercontent.com/samboland/goo-4k/main/get.ps1 | iex
 It downloads the latest release, locates the Steam install, verifies the files are the expected
 build, backs up `WorldOfGoo.exe` and `SDL2.dll` to `goo4k-backup`, patches them, installs the
 shim and the texture pack, and sets the framebuffer and vsync lines in the game config. Then
-launch from Steam as usual. Options go through a scriptblock:
+launch from Steam as usual. It asks before touching anything: which folder, whether you want the
+texture pack, and, if goo-4k is already installed, whether to update or remove it. For scripted use
+the prompts can be skipped:
 
 ```
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samboland/goo-4k/main/get.ps1))) -NoTextures
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samboland/goo-4k/main/get.ps1))) -Yes -NoTextures
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/samboland/goo-4k/main/get.ps1))) -Uninstall
 ```
 
