@@ -11,7 +11,7 @@ Not affiliated with 2D Boy or Tomorrow Corporation. The repository contains no g
 - **Native framebuffer.** The game renders into an offscreen framebuffer; the installer sets it
   to your display size instead of the stock 1600x900.
 - **4x-native art.** A texture pack of every shipped image, upscaled 2x from the remaster's own
-  2x assets with the StarSample model. The loader is patched to read `name@4x.png` when present
+  2x assets with .derpy's [StarSample](https://openmodeldb.info/models/2x-StarSample-V2-HQ) model. The loader is patched to read `name@4x.png` when present
   and fall back to the stock `name@2x.png`, so the pack is purely additive.
 - **Smooth motion at any refresh rate.** The simulation stays at the stock 50 Hz, bit-for-bit.
   Between ticks, drawn positions of every physics body, the camera, the cursor and the
@@ -120,5 +120,6 @@ docs/ENGINE.md   reverse-engineering notes and addresses
 
 ## Credits
 
-World of Goo by 2D Boy; the remaster by Tomorrow Corporation. StarSample upscaling model by its
-author (see the model card). Built with chaiNNer, Ghidra, MinGW-w64 and PresentMon.
+World of Goo by 2D Boy; the remaster by Tomorrow Corporation. Upscaling model:
+[2x StarSample V2 HQ](https://openmodeldb.info/models/2x-StarSample-V2-HQ) by .derpy. Built with
+chaiNNer, Ghidra, MinGW-w64 and PresentMon.

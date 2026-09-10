@@ -120,7 +120,7 @@ tick variant fixed some and not others. Interpolation replaced it; the code was 
 
 ## Asset batch
 
-Chain: StarSample 2x with median and curvature blur, alpha carried through the model, forced 2x
+Chain: [2x StarSample V2 HQ](https://openmodeldb.info/models/2x-StarSample-V2-HQ) by .derpy with median and curvature blur, alpha carried through the model, forced 2x
 (`tools/run_chain_batch.py --scale 2`, final node the last blur). Inputs are staged flat with path
 segments joined by `__` and the `@2x` suffix stripped; `report.json` in the output folder is the
 resumable progress record; `tools/install_4x.py` copies results into a `res` tree as `@4x.png`
