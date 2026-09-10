@@ -74,3 +74,9 @@ Decision (Sam): StarSample 2x on all 2123 files first, then a second pass only w
 - Install: `python tools/install_4x.py work/batch-all/out work/sandbox/game/res` (idempotent).
 
 Open item: possible stray particles on the map's level-complete goo eruption under the interpolation build. Compare against stock later.
+
+### DXGI presentation shim (tools/present)
+
+Proxy `SDL2.dll` built from shim.cpp with MinGW (`sh tools/present/build.sh`). 653 exports forward to `SDL2_real.dll` (the no-minimize patched stock DLL); `SDL_GL_SwapWindow`, `SDL_GL_SetSwapInterval`, `SDL_GL_GetSwapInterval` are intercepted. First swap: D3D11 device, `IDXGIFactory2::CreateSwapChainForHwnd` on the GL window (BGRA8, 3 buffers, FLIP_DISCARD, ALLOW_TEARING when supported, NO_ALT_ENTER), `wglDXOpenDeviceNV`, and a shared D3D texture registered to a GL texture. Each frame: lock, `glBlitFramebuffer` from the window back buffer (Y flipped) into the shared texture, unlock, `CopyResource` to buffer 0, `Present(interval==0 ? 0 : 1, tearing flag when 0)`. The real GL swap is never called. Size changes call `ResizeBuffers`. Set env `GOO_PRESENT_OFF=1` to fall back to the GL swap. Log at `%LOCALAPPDATA%\2DBoy\WorldOfGoo\goopresent.log`.
+
+Result (Sam, 2026-09-10): alt-tab black handoff gone. This replaces the one-row-short SDL fallback, which is kept in tools/sdl2_patch.py but unused.
