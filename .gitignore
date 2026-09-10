@@ -1,0 +1,4 @@
+work/
+*.exe
+*.dll
+__pycache__/
