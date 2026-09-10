@@ -77,6 +77,8 @@ if ($Uninstall) {
 }
 
 if (Get-Process WorldOfGoo -ErrorAction SilentlyContinue) { throw "World of Goo is running. Close it first." }
+try { $probe = Join-Path $win64 'goo4k-writetest'; [IO.File]::WriteAllText($probe, ''); Remove-Item $probe }
+catch { throw "No write access to $win64. Run this from an elevated (Administrator) PowerShell, or fix the folder permissions." }
 
 Write-Host "Patching:"
 Apply-Manifest (Join-Path $here 'patches\WorldOfGoo.exe.json') (Join-Path $win64 'WorldOfGoo.exe') $backup

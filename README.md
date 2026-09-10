@@ -1,42 +1,52 @@
 # goo-4k
 
 Native-resolution rendering, 4x-native art, and high-refresh motion for the Steam release of
-**World of Goo** (2019 remaster, Win64). Tested on build 20824155 (17 Nov 2025) at 3840x2160,
-240 Hz.
+**World of Goo** (2019 remaster, Win64). Tested on build 20824155 (17 Nov 2025) at 3840x2160 @ 240Hz.
 
-Not affiliated with 2D Boy or Tomorrow Corporation. The repository contains no game files.
+This project is not affiliated with 2D Boy or Tomorrow Corporation. The repository contains no game files in and of itself.
 
 ## What it does
 
-- **Native framebuffer.** The game renders into an offscreen framebuffer; the installer sets it
+- **Native framebuffer:** The game renders into an offscreen framebuffer; the installer sets it
   to your display size instead of the stock 1600x900.
-- **4x-native art.** A texture pack of every shipped image, upscaled 2x from the remaster's own
+- **4x-native art:** A texture pack of every shipped image, upscaled 2x from the remaster's own
   2x assets with .derpy's [StarSample](https://openmodeldb.info/models/2x-StarSample-V2-HQ) model. The loader is patched to read `name@4x.png` when present
   and fall back to the stock `name@2x.png`, so the pack is purely additive.
-- **Smooth motion at any refresh rate.** The simulation stays at the stock 50 Hz, bit-for-bit.
+- **Smooth motion at any refresh rate:** The simulation stays at the stock 50 Hz, bit-for-bit.
   Between ticks, drawn positions of every physics body, the camera, the cursor and the
   clock-driven and keyframe animations are interpolated by the frame's sub-tick fraction.
-- **Modern presentation.** A proxy `SDL2.dll` presents the OpenGL frame through a DirectX 11
-  flip-model swapchain (`WGL_NV_DX_interop2`). Instant alt-tab in borderless fullscreen, VRR and
+- **Modern presentation:** A proxy `SDL2.dll` presents the OpenGL frame through a DirectX 11
+  flip-model swapchain (`WGL_NV_DX_interop2`). VRR,
   tearing-free vsync, and DirectX overlays such as Special K (HDR retrofit confirmed working).
-- **No more minimize on alt-tab.** The bundled SDL 2.0.9 default is patched.
+- **No black screen on Alt + Tab:** Instant alt-tab in borderless fullscreen. The bundled SDL 2.0.9 default is patched.
 
 ## Install
 
-Requirements: the Steam build of World of Goo on Windows 10/11, a GPU with D3D11 and the
-`WGL_NV_DX_interop2` extension (NVIDIA, AMD and Intel all provide it).
+Requirements: the current Steam build of World of Goo on Windows 10/11 and a GPU with D3D11 (and the
+`WGL_NV_DX_interop2` extension which NVIDIA, AMD and Intel all provide by default)
 
-1. Download the installer zip and, optionally, the texture pack zip from Releases.
-2. Extract the installer. If you have the texture pack, extract it so that a `textures` folder
-   sits next to `install.cmd`.
-3. Close the game and run `install.cmd`. It locates the Steam install, verifies the files are the
-   expected build, backs up `WorldOfGoo.exe` and `SDL2.dll` to `goo4k-backup`, patches them,
-   installs the shim and textures, and sets the framebuffer and vsync lines in the game config.
-4. Launch from Steam as usual.
+Close the game, open PowerShell, and run:
 
-`uninstall.cmd` restores the backups and removes the installed textures. Steam's "verify
-integrity of game files" also restores the stock exe and SDL2.dll (the textures are extra files
-and stay); rerun `install.cmd` afterwards.
+```
+irm https://raw.githubusercontent.com/samboland/goo-4k/main/get.ps1 | iex
+```
+
+It downloads the latest release, locates the Steam install, verifies the files are the expected
+build, backs up `WorldOfGoo.exe` and `SDL2.dll` to `goo4k-backup`, patches them, installs the
+shim and the texture pack, and sets the framebuffer and vsync lines in the game config. Then
+launch from Steam as usual. Options go through a scriptblock:
+
+```
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samboland/goo-4k/main/get.ps1))) -NoTextures
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samboland/goo-4k/main/get.ps1))) -Uninstall
+```
+
+Offline: download the installer zip and the texture pack zip from Releases, extract the
+installer, put the pack's `textures` folder next to `install.cmd`, and run `install.cmd`.
+`uninstall.cmd` restores the backups and removes the installed textures.
+
+Steam's "verify integrity of game files" restores the stock exe and SDL2.dll (the textures are
+extra files and stay); rerun the installer afterwards.
 
 ### Options
 
@@ -129,3 +139,7 @@ covered; the texture pack is a derivative of their art and is distributed separa
 World of Goo by 2D Boy; the remaster by Tomorrow Corporation. Upscaling model:
 [2x StarSample V2 HQ](https://openmodeldb.info/models/2x-StarSample-V2-HQ) by .derpy. Built with
 chaiNNer, Ghidra, MinGW-w64 and PresentMon.
+
+This repository was developed with the help of Claude Fable 5.1.
+
+Copyright (c) 2026 Sam Boland

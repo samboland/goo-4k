@@ -45,7 +45,11 @@ subprocess.check_call([py, str(root / 'tools/pack/make_manifest.py'), str(stock_
 shutil.copy2(shim, out / 'files/SDL2.dll')
 for f in ('install.ps1', 'install.cmd', 'uninstall.cmd', 'README.txt'): shutil.copy2(root / 'tools/pack' / f, out / f)
 (out / 'VERSION').write_text(version + '\n')
-print('installer:', out)
+zi = root / 'dist' / f'goo4k-{version}.zip'
+with zipfile.ZipFile(zi, 'w', zipfile.ZIP_DEFLATED) as zf:
+    for f in sorted(out.rglob('*')):
+        if f.is_file(): zf.write(f, (out.name + '/' + f.relative_to(out).as_posix()))
+print('installer:', out, 'and', zi)
 
 # 5. textures
 if a.textures:
