@@ -92,3 +92,7 @@ Result (Sam, 2026-09-10): alt-tab black handoff gone. This replaces the one-row-
 ### Special K (2026-09-10)
 
 Confirmed by Sam: Special K attaches to the shim's D3D11 flip-model swapchain and its HDR retrofit works as intended. No special configuration needed.
+
+### Look of the StarSample output (2026-09-10)
+
+Sam: the 4x set reads like World of Goo 2, clean modern cartoon, because StarSample removes grain and painterly texture. Accepted as the default. A possible later variant pack could restore texture (grain-restore post pass, or a blend with a Lanczos 2x of the stock file); the pack format supports swapping files one for one, no code change.
