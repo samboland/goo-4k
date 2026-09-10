@@ -63,8 +63,8 @@ for site in (0x1400bb34b,0x1400bb79a,0x1400bb97d):     # lea r9/r8, [rip+".png"]
     assert struct.unpack_from('<i',d,o+3)[0]+site+7==0x1402b837c
     struct.pack_into('<i',d,o+3,sfx2-(site+7))
 for site in (0x1400bb342,0x1400bb791):                 # movq $4 -> $7 (suffix length)
-    o=va2off(site); assert d[o:o+8]==bytes.fromhex('48c7442420 04000000'.replace(' ','')), d[o:o+8].hex()
-    d[o+4]=7
+    o=va2off(site); assert d[o:o+9]==bytes.fromhex('48c744242004000000'), d[o:o+9].hex()
+    d[o+5]=7
 for site in (0x1400bb355,0x1400bb7a4):                 # mov edx,4 -> 7
     o=va2off(site); assert d[o:o+5]==bytes.fromhex('ba04000000'); d[o+1]=7
 o=va2off(0x1400d7c77)                                  # non-4x path scale 1.0 -> 0.5
