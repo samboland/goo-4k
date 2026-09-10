@@ -38,6 +38,7 @@ g_cam_save:  .float 0,0
 g_cur_ptr:   .fill 4,8,0
 g_cur_save:  .fill 8,4,0
 g_sfx2x:     .asciz "@2x.png"
+g_stamp:     .asciz "GOO4K:BUILD_STAMP"
 g_tick:      .long 0
 g_anim_n:    .long 0
 g_anim_max:  .float 0.15       # ignore time jumps larger than this per tick (restarts, loop wraps)

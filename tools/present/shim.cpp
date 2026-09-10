@@ -11,6 +11,8 @@
 #include <GL/gl.h>
 #include <GL/glext.h>
 #include <GL/wglext.h>
+#include <d2d1.h>
+#include <dwrite.h>
 #include <cstdio>
 #include <cstdarg>
 #include <cstdlib>
@@ -89,7 +91,7 @@ static void read_settings() {
     char path[MAX_PATH]; DWORD n = GetEnvironmentVariableA("LOCALAPPDATA", path, MAX_PATH);
     if (n && n < MAX_PATH) {
         strcat_s(path, "\\2DBoy\\WorldOfGoo\\goopresent.ini");
-        if (FILE* f = fopen(path, "r")) { char line[256]; while (fgets(line, sizeof line, f)) { double v; if (sscanf(line, " fps_cap = %lf", &v) == 1 || sscanf(line, " fps_cap=%lf", &v) == 1) cap = v; } fclose(f); }
+        if (FILE* f = fopen(path, "r")) { char line[256]; while (fgets(line, sizeof line, f)) { double v; int o; if (sscanf(line, " fps_cap = %lf", &v) == 1 || sscanf(line, " fps_cap=%lf", &v) == 1) cap = v; if (sscanf(line, " overlay = %d", &o) == 1 || sscanf(line, " overlay=%d", &o) == 1) g_overlay = o != 0; } fclose(f); }
     }
     if (const char* e = getenv("GOO_FPS_CAP")) cap = atof(e);
     g_cap_period = cap > 0 ? 1.0 / cap : 0;
@@ -112,7 +114,67 @@ static void wait_for_cap() {
     g_last_present = now;
 }
 
+// ---- build stamp overlay (Direct2D on the shared texture)
+static bool g_overlay = true;
+static ID2D1Factory* g_d2d = nullptr;
+static IDWriteFactory* g_dw = nullptr;
+static IDWriteTextFormat* g_fmt = nullptr;
+static ID2D1RenderTarget* g_rt = nullptr;
+static ID2D1SolidColorBrush* g_brush = nullptr;
+static wchar_t g_text[256] = L"";
+
+static void find_exe_stamp(char* out, size_t n) {
+    strcpy_s(out, n, "exe: no stamp");
+    BYTE* base = (BYTE*)GetModuleHandleA(nullptr);
+    IMAGE_DOS_HEADER* dos = (IMAGE_DOS_HEADER*)base;
+    IMAGE_NT_HEADERS* nt = (IMAGE_NT_HEADERS*)(base + dos->e_lfanew);
+    IMAGE_SECTION_HEADER* sec = IMAGE_FIRST_SECTION(nt);
+    for (unsigned i = 0; i < nt->FileHeader.NumberOfSections; i++) {
+        if (memcmp(sec[i].Name, ".goo", 4) != 0) continue;
+        BYTE* p = base + sec[i].VirtualAddress; DWORD len = sec[i].Misc.VirtualSize;
+        for (DWORD k = 0; k + 6 < len; k++) {
+            if (memcmp(p + k, "GOO4K:", 6) == 0) { strncpy_s(out, n, (char*)p + k + 6, _TRUNCATE); return; }
+        }
+    }
+}
+
+static void overlay_init_text() {
+    char stamp[128]; find_exe_stamp(stamp, sizeof stamp);
+    char buf[256]; snprintf(buf, sizeof buf, "goo-4k  exe %s   shim %s %s", stamp, __DATE__, __TIME__);
+    MultiByteToWideChar(CP_ACP, 0, buf, -1, g_text, 256);
+    logf("overlay: %s", buf);
+}
+
+static void overlay_destroy() {
+    if (g_brush) { g_brush->Release(); g_brush = nullptr; }
+    if (g_rt) { g_rt->Release(); g_rt = nullptr; }
+}
+
+static void overlay_create() {
+    if (!g_overlay || !g_shared) return;
+    if (!g_d2d && FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory), nullptr, (void**)&g_d2d))) { logf("D2D factory failed"); g_overlay = false; return; }
+    if (!g_dw && FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown**)&g_dw))) { logf("DWrite factory failed"); g_overlay = false; return; }
+    if (!g_fmt) { g_dw->CreateTextFormat(L"Consolas", nullptr, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 22.0f, L"", &g_fmt); overlay_init_text(); }
+    IDXGISurface* surf = nullptr;
+    if (FAILED(g_shared->QueryInterface(__uuidof(IDXGISurface), (void**)&surf))) return;
+    D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_DEFAULT,
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE), 96.0f, 96.0f);
+    HRESULT hr = g_d2d->CreateDxgiSurfaceRenderTarget(surf, &props, &g_rt);
+    surf->Release();
+    if (FAILED(hr)) { logf("D2D render target failed %08lx", hr); g_overlay = false; return; }
+    g_rt->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 0.4f, 0.9f), &g_brush);
+}
+
+static void overlay_draw() {
+    if (!g_rt || !g_fmt || !g_brush) return;
+    g_rt->BeginDraw();
+    D2D1_RECT_F rc = D2D1::RectF(12.0f, 8.0f, 1400.0f, 40.0f);
+    g_rt->DrawTextW(g_text, (UINT32)wcslen(g_text), g_fmt, rc, g_brush);
+    g_rt->EndDraw();
+}
+
 static void destroy_shared() {
+    overlay_destroy();
     if (g_sharedH) { p_wglDXUnregisterObjectNV(g_interop, g_sharedH); g_sharedH = nullptr; }
     if (g_fbo) { p_glDeleteFramebuffers(1, &g_fbo); g_fbo = 0; }
     if (g_tex) { glDeleteTextures(1, &g_tex); g_tex = 0; }
@@ -129,6 +191,7 @@ static bool create_shared(int w, int h) {
     g_sharedH = p_wglDXRegisterObjectNV(g_interop, g_shared, g_tex, GL_TEXTURE_2D, WGL_ACCESS_WRITE_DISCARD_NV);
     if (!g_sharedH) { logf("wglDXRegisterObjectNV failed (%lu)", GetLastError()); return false; }
     p_glGenFramebuffers(1, &g_fbo);
+    overlay_create();
     return true;
 }
 
@@ -210,6 +273,7 @@ static void present_frame() {
     p_glBlitFramebuffer(0, 0, w, h, 0, h, w, 0, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     p_glBindFramebuffer(GL_READ_FRAMEBUFFER, prevRead); p_glBindFramebuffer(GL_DRAW_FRAMEBUFFER, prevDraw);
     p_wglDXUnlockObjectsNV(g_interop, 1, &g_sharedH);
+    overlay_draw();
 
     // D3D: shared -> back buffer, present
     ID3D11Texture2D* bb = nullptr;

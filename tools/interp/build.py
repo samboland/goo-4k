@@ -21,7 +21,12 @@ assert sec(nsec)+40<=struct.unpack_from('<I',d,opt+60)[0], 'no room for a sectio
 # --- assemble ---
 with tempfile.TemporaryDirectory() as t:
     t=pathlib.Path(t)
-    subprocess.check_call(['as','--64','-o',str(t/'c.o'),str(here/'cave.s')])
+    import datetime
+    try: rev=subprocess.check_output(['git','rev-parse','--short','HEAD'],cwd=here).decode().strip()
+    except Exception: rev='nogit'
+    stamp=datetime.datetime.now().strftime('%m-%d %H:%M')+' '+rev
+    (t/'cave.s').write_text((here/'cave.s').read_text().replace('BUILD_STAMP',stamp))
+    subprocess.check_call(['as','--64','-o',str(t/'c.o'),str(t/'cave.s')])
     subprocess.check_call(['ld',f'-Ttext={SEC_VA:#x}','-e','_start','-o',str(t/'c.elf'),str(t/'c.o')],stderr=subprocess.DEVNULL)
     subprocess.check_call(['objcopy','-O','binary','-j','.text',str(t/'c.elf'),str(t/'c.bin')])
     blob=(t/'c.bin').read_bytes()
@@ -74,4 +79,4 @@ struct.pack_into('<i',d,o+4,0x1402af500-(0x1400d7c77+8))
 assert d[va2off(0x1400ab237)]==0x32
 assert d[va2off(0x140089020):va2off(0x140089020)+8]==bytes.fromhex('48c747500000803f')
 open(a.dst,'wb').write(d)
-print(f'{a.dst}: section .goo at {SEC_VA:#x} ({len(blob)} bytes)', ' '.join(f'{k} {syms[k]:#x}' for k in ('tramp','tick_hook','draw_hook','time_hook','anim_hook')))
+print(f'stamp {stamp}'); print(f'{a.dst}: section .goo at {SEC_VA:#x} ({len(blob)} bytes)', ' '.join(f'{k} {syms[k]:#x}' for k in ('tramp','tick_hook','draw_hook','time_hook','anim_hook')))
