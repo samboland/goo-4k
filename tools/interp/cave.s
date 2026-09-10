@@ -30,6 +30,8 @@ g_fifty:     .float 50.0
 g_one:       .float 1.0
              .long 0
 g_worlds:    .fill 8,8,0
+g_wcount:    .fill 8,4,0
+g_rot_max:   .float 3.0
 g_cam:       .quad 0
 g_cam_prev:  .float 0,0
 g_cam_save:  .float 0,0
@@ -103,7 +105,20 @@ snapshot_world:
     cmp   edi, 4096
     jbe   5f
     mov   edi, 4096
-5:  xor   r12d, r12d
+5:  lea   rax, [rip+g_wcount]
+    mov   edx, [rax+r12*4]              # old count for this slot
+    mov   [rax+r12*4], edi              # new count
+    cmp   edx, edi
+    jbe   6f
+    sub   edx, edi                      # entries [new, old): invalidate
+    mov   rax, rdi
+    shl   rax, 5
+    add   rax, rsi
+7:  mov   qword ptr [rax], 0
+    add   rax, 0x20
+    dec   edx
+    jnz   7b
+6:  xor   r12d, r12d
 snap_loop:
     cmp   r12d, edi
     jae   snap_done
@@ -226,7 +241,11 @@ wloop:
     mov   edi, [rbx+0x8010]
     test  edi, edi
     js    wnext
-    cmp   edi, 4096
+    lea   rax, [rip+g_wcount]
+    cmp   edi, [rax+r12*4]
+    jbe   2f
+    mov   edi, [rax+r12*4]              # bodies added after the snapshot are not interpolated
+2:  cmp   edi, 4096
     jbe   2f
     mov   edi, 4096
 2:  xor   r13d, r13d
@@ -267,10 +286,14 @@ bloop:
     movss dword ptr [rax+0x2c], xmm0
     movss xmm0, dword ptr [rax+0x30]
     subss xmm0, dword ptr [rsi+0x10]
+    movaps xmm2, xmm0
+    andps xmm2, xmmword ptr [rip+g_absmask]
+    ucomiss xmm2, dword ptr [rip+g_rot_max]
+    ja    8f                            # angle wrapped: keep the current rotation
     mulss xmm0, xmm1
     addss xmm0, dword ptr [rsi+0x10]
     movss dword ptr [rax+0x30], xmm0
-    mov   byte ptr [rax+0x18], 1
+8:  mov   byte ptr [rax+0x18], 1
     jmp   bnext
 bskip:
     mov   qword ptr [rsi], 0
@@ -402,7 +425,11 @@ rwloop:
     mov   edi, [rbx+0x8010]
     test  edi, edi
     js    rwnext
-    cmp   edi, 4096
+    lea   rax, [rip+g_wcount]
+    cmp   edi, [rax+r12*4]
+    jbe   3f
+    mov   edi, [rax+r12*4]
+3:  cmp   edi, 4096
     jbe   3f
     mov   edi, 4096
 3:  xor   r13d, r13d
@@ -470,6 +497,7 @@ anim_new:
     mov   [r10+16], eax
     mov   [r10+20], eax
     mov   [r10+24], eax
+    mov   dword ptr [r10+28], 0
     jmp   anim_out
 anim_found:
     mov   eax, dword ptr [rip+g_tick]
@@ -482,11 +510,19 @@ anim_found:
     movss dword ptr [r10+12], xmm1
     mov   [r10+16], eax
     mov   [r10+20], eax
+    mov   dword ptr [r10+28], 0
     jmp   anim_out
-4:  ucomiss xmm1, dword ptr [r10+8]
+4:  cmp   dword ptr [r10+28], 0
+    jne   anim_out                      # clock-driven: changes every frame, already smooth
+    ucomiss xmm1, dword ptr [r10+8]
     jp    2f
     je    3f
-2:  mov   eax, [r10+8]                  # value changed: shift history
+2:  mov   eax, dword ptr [rip+g_tick]
+    cmp   eax, [r10+16]
+    jne   9f
+    mov   dword ptr [r10+28], 1         # changed twice within one tick
+    jmp   anim_out
+9:  mov   eax, [r10+8]                  # value changed: shift history
     mov   [r10+12], eax
     mov   eax, [r10+16]
     mov   [r10+20], eax
