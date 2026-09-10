@@ -55,8 +55,8 @@ if (-not $Uninstall -and -not $NoTextures) {
     } else { Write-Host "No texture pack in this release; installing the engine patches only." }
 }
 
-$installArgs = @()
-if ($GameDir) { $installArgs += @('-GameDir', $GameDir) }
-if ($Uninstall) { $installArgs += '-Uninstall' }
-if ($NoTextures) { $installArgs += '-NoTextures' }
+$installArgs = @{}
+if ($GameDir) { $installArgs.GameDir = $GameDir }
+if ($Uninstall) { $installArgs.Uninstall = $true }
+if ($NoTextures) { $installArgs.NoTextures = $true }
 & (Join-Path $installDir 'install.ps1') @installArgs
