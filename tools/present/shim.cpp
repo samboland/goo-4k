@@ -92,10 +92,11 @@ static void read_settings() {
     char path[MAX_PATH]; DWORD n = GetEnvironmentVariableA("LOCALAPPDATA", path, MAX_PATH);
     if (n && n < MAX_PATH) {
         strcat_s(path, "\\2DBoy\\WorldOfGoo\\goopresent.ini");
-        if (FILE* f = fopen(path, "r")) { char line[256]; while (fgets(line, sizeof line, f)) { double v; int o; if (sscanf(line, " fps_cap = %lf", &v) == 1 || sscanf(line, " fps_cap=%lf", &v) == 1) cap = v; if (sscanf(line, " overlay = %d", &o) == 1 || sscanf(line, " overlay=%d", &o) == 1) g_overlay = o != 0; } fclose(f); }
+        if (FILE* f = fopen(path, "r")) { char line[256]; while (fgets(line, sizeof line, f)) { double v; int o; if (sscanf(line, " fps_cap = %lf", &v) == 1 || sscanf(line, " fps_cap=%lf", &v) == 1) cap = v; if (sscanf(line, " overlay = %d", &o) == 1 || sscanf(line, " overlay=%d", &o) == 1) g_overlay = o != 0; if (sscanf(line, " interp = %d", &o) == 1 || sscanf(line, " interp=%d", &o) == 1) g_interp_flags = o; } fclose(f); }
     }
     if (const char* e = getenv("GOO_FPS_CAP")) cap = atof(e);
     g_cap_period = cap > 0 ? 1.0 / cap : 0;
+    apply_flags();
     QueryPerformanceFrequency(&g_qpf);
     logf("fps_cap=%.1f", cap);
 }
@@ -123,6 +124,28 @@ static ID2D1RenderTarget* g_rt = nullptr;
 static ID2D1SolidColorBrush* g_brush = nullptr;
 static wchar_t g_text[256] = L"";
 
+static BYTE* find_goo_marker(const char* marker) {
+    BYTE* base = (BYTE*)GetModuleHandleA(nullptr);
+    IMAGE_DOS_HEADER* dos = (IMAGE_DOS_HEADER*)base;
+    IMAGE_NT_HEADERS* nt = (IMAGE_NT_HEADERS*)(base + dos->e_lfanew);
+    IMAGE_SECTION_HEADER* sec = IMAGE_FIRST_SECTION(nt);
+    size_t ml = strlen(marker);
+    for (unsigned i = 0; i < nt->FileHeader.NumberOfSections; i++) {
+        if (memcmp(sec[i].Name, ".goo", 4) != 0) continue;
+        BYTE* p = base + sec[i].VirtualAddress; DWORD len = sec[i].Misc.VirtualSize;
+        for (DWORD k = 0; k + ml < len; k++) if (memcmp(p + k, marker, ml) == 0) return p + k;
+    }
+    return nullptr;
+}
+static int g_interp_flags = -1;       // ini: interp=<mask>; -1 leaves the exe default (all on)
+static void apply_flags() {
+    BYTE* m = find_goo_marker("GOO4KFLAGS");
+    if (!m) { logf("no GOO4KFLAGS marker in exe"); return; }
+    DWORD* flags = (DWORD*)(m + 12);
+    if (g_interp_flags >= 0) *flags = (DWORD)g_interp_flags;
+    logf("interp flags = %lu (1 bodies, 2 clock, 4 anims, 8 camera, 16 cursor)", *flags);
+}
+
 static void find_exe_stamp(char* out, size_t n) {
     strcpy_s(out, n, "exe: no stamp");
     BYTE* base = (BYTE*)GetModuleHandleA(nullptr);
@@ -140,7 +163,8 @@ static void find_exe_stamp(char* out, size_t n) {
 
 static void overlay_init_text() {
     char stamp[128]; find_exe_stamp(stamp, sizeof stamp);
-    char buf[256]; snprintf(buf, sizeof buf, "goo-4k  exe %s   shim %s %s", stamp, __DATE__, __TIME__);
+    BYTE* m = find_goo_marker("GOO4KFLAGS"); DWORD fl = m ? *(DWORD*)(m + 12) : 0;
+    char buf[256]; snprintf(buf, sizeof buf, "goo-4k  exe %s   shim %s %s   interp=%lu", stamp, __DATE__, __TIME__, fl);
     MultiByteToWideChar(CP_ACP, 0, buf, -1, g_text, 256);
     logf("overlay: %s", buf);
 }

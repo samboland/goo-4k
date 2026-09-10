@@ -39,6 +39,9 @@ g_cur_ptr:   .fill 4,8,0
 g_cur_save:  .fill 8,4,0
 g_sfx2x:     .asciz "@2x.png"
 g_stamp:     .asciz "GOO4K:BUILD_STAMP"
+g_flagmark:  .asciz "GOO4KFLAGS"
+             .byte 0
+g_flags:     .long 0xffffffff   # 1 bodies, 2 clock, 4 keyframe anims, 8 camera, 16 cursor (shim writes from ini)
 g_tick:      .long 0
 g_anim_n:    .long 0
 g_anim_max:  .float 0.15       # ignore time jumps larger than this per tick (restarts, loop wraps)
@@ -186,6 +189,8 @@ time_hook:                          # rcx = Wog -> xmm0 seconds
     movss xmm0, dword ptr [rbx+0x54]
     cmp   dword ptr [rip+g_indraw], 0
     je    1f
+    test  dword ptr [rip+g_flags], 2
+    jz    1f
     addss xmm0, dword ptr [rip+g_alpha]
 1:  divss xmm0, xmm1
     mulss xmm0, dword ptr [rbx+0x50]
@@ -228,6 +233,8 @@ draw_hook:                          # rcx=renderer rdx=graphics
     mov   dword ptr [rip+g_indraw], 1
     # ---- bodies: save cur, write lerp
     xor   r12d, r12d
+    test  dword ptr [rip+g_flags], 1
+    jz    wdone
 wloop:
     cmp   r12d, dword ptr [rip+g_nworlds]
     jae   wdone
@@ -307,6 +314,8 @@ wnext:
     jmp   wloop
 wdone:
     # ---- camera
+    test  dword ptr [rip+g_flags], 8
+    jz    cdone
     mov   rax, [rip+g_cam]
     test  rax, rax
     jz    cdone
@@ -344,6 +353,8 @@ cdone:
 curs:
     lea   rax, [rip+g_cur_ptr]
     mov   qword ptr [rax+r12*8], 0
+    test  dword ptr [rip+g_flags], 16
+    jz    curs_next
     test  rdi, rdi
     jz    curs_next
     mov   rsi, [rdi+0x2e0+r12*8]
@@ -401,6 +412,8 @@ rcurs_next:
     cmp   r12d, 4
     jb    rcurs
     # ---- restore camera
+    test  dword ptr [rip+g_flags], 8
+    jz    rcdone
     mov   rax, [rip+g_cam]
     test  rax, rax
     jz    rcdone
@@ -412,6 +425,8 @@ rcurs_next:
 rcdone:
     # ---- restore bodies
     xor   r12d, r12d
+    test  dword ptr [rip+g_flags], 1
+    jz    rwdone
 rwloop:
     cmp   r12d, dword ptr [rip+g_nworlds]
     jae   rwdone
@@ -474,6 +489,8 @@ rwdone:
 anim_hook:
     cmp   dword ptr [rip+g_indraw], 0
     je    anim_out
+    test  dword ptr [rip+g_flags], 4
+    jz    anim_out
     mov   rax, 0x140003762              # particle effect draw: per-particle anims churn, no interpolation
     cmp   [rsp], rax
     je    anim_out
