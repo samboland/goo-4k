@@ -88,3 +88,7 @@ Result (Sam, 2026-09-10): alt-tab black handoff gone. This replaces the one-row-
 - Held goo ball spin on the title screen: present in stock. Not ours.
 - Bisect switches: `interp=<mask>` in goopresent.ini (1 bodies, 2 clock, 4 anims, 8 camera, 16 cursor). The shim writes it to the exe's `.goo` section (`GOO4KFLAGS` marker). Overlay shows exe stamp, shim build time and the mask; `overlay=0` hides it.
 - Debug key: F5 spawns the `unlockburst` effect at the camera (factory create, setPosition, Scene::addObject on the level's main scene). Status codes are logged by the shim.
+
+### Special K (2026-09-10)
+
+Confirmed by Sam: Special K attaches to the shim's D3D11 flip-model swapchain and its HDR retrofit works as intended. No special configuration needed.
