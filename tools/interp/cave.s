@@ -481,8 +481,10 @@ anim_found:
     andps xmm5, xmmword ptr [rip+g_absmask]
     ucomiss xmm5, dword ptr [rip+g_anim_max]
     ja    anim_out                      # loop wrap or reset: hold
-    mulss xmm4, dword ptr [rip+g_alpha]
-    addss xmm1, xmm4
+    movss xmm5, dword ptr [rip+g_one]   # interpolate: t = last - (1 - alpha) * rate
+    subss xmm5, dword ptr [rip+g_alpha]
+    mulss xmm4, xmm5
+    subss xmm1, xmm4
 anim_out:
     push  rbx                           # relocated prologue of ANIM_EVAL
     push  rbp
