@@ -12,6 +12,9 @@
 .set MODEL_CAM,  0x140057870    # Camera* (Model)   current level scene camera
 .set DEV_POS,    0x14009c800    # pos* (device): x +8, y +0xc
 .set OP_NEW,     0x140271874    # operator new(size)
+.set FX_FACTORY, 0x140017690    # EffectsFactory* ()
+.set FX_CREATE,  0x1400175d0    # Effect* (factory, string* outId, string* name, float depth)
+.set VEC2_VT,    0x1402aea48    # BoyLib::Vector2::vftable
 .set IAT_QPC,    0x1402ae238    # kernel32 QueryPerformanceCounter
 .set IAT_QPF,    0x1402ae240    # kernel32 QueryPerformanceFrequency
 .set ANIM_EVAL,  0x140029e10    # ImageAnimation evaluate(anim, float t, float t0, graphics); prologue relocated
@@ -40,6 +43,11 @@ g_cur_ptr:   .fill 4,8,0
 g_cur_save:  .fill 8,4,0
 g_sfx2x:     .asciz "@2x.png"
 g_stamp:     .asciz "GOO4K:BUILD_STAMP"
+g_dbgmark:   .asciz "GOO4KDEBUG"
+             .byte 0
+g_debug:     .long 0            # shim writes 1 on F5: spawn an unlock burst at the camera
+g_burstname: .asciz "unlockburst"
+             .space 4
 g_flagmark:  .asciz "GOO4KFLAGS"
              .byte 0
 g_flags:     .long 0xffffffff   # 1 bodies, 2 clock, 4 keyframe anims, 8 camera, 16 cursor (shim writes from ini)
@@ -172,10 +180,56 @@ tick_hook:                          # rcx = Wog
     mov   dword ptr [rip+g_cam_prev], ecx
     mov   ecx, [rax+0x1c]
     mov   dword ptr [rip+g_cam_prev+4], ecx
-1:  mov   rcx, rbx
+1:  cmp   dword ptr [rip+g_debug], 0
+    je    5f
+    mov   dword ptr [rip+g_debug], 0
+    call  debug_burst
+5:  mov   rcx, rbx
     add   rsp, 0x20
     pop   rbx
     jmp   _start+(WOG_TICK-BASE)
+
+# rbx = Wog. Spawn the "unlockburst" particle effect at the current camera position.
+debug_burst:
+    push  rsi
+    push  rdi
+    sub   rsp, 0x88                     # locals: name string +0x20, out string +0x40, vec +0x60
+    mov   rax, [rip+g_cam]
+    test  rax, rax
+    jz    9f
+    mov   esi, [rax+0x18]               # camera x, y
+    mov   edi, [rax+0x1c]
+    lea   rax, [rip+g_burstname]
+    mov   rcx, [rax]
+    mov   [rsp+0x20], rcx
+    mov   rcx, [rax+8]
+    mov   [rsp+0x28], rcx
+    mov   qword ptr [rsp+0x30], 11
+    mov   qword ptr [rsp+0x38], 15
+    mov   byte ptr [rsp+0x40], 0
+    mov   qword ptr [rsp+0x50], 0
+    mov   qword ptr [rsp+0x58], 15
+    call  _start+(FX_FACTORY-BASE)
+    mov   rcx, rax
+    lea   rdx, [rsp+0x40]
+    lea   r8, [rsp+0x20]
+    movss xmm3, dword ptr [rip+g_one]
+    call  _start+(FX_CREATE-BASE)
+    test  rax, rax
+    jz    9f
+    mov   rcx, VEC2_VT
+    mov   [rsp+0x60], rcx
+    mov   [rsp+0x68], esi
+    mov   [rsp+0x6c], edi
+    mov   dword ptr [rax+0x100], 0x1e
+    mov   rcx, rax
+    lea   rdx, [rsp+0x60]
+    mov   rax, [rax]
+    call  qword ptr [rax+0x20]          # setPosition(vec)
+9:  add   rsp, 0x88
+    pop   rdi
+    pop   rsi
+    ret
 
 # ---------------------------------------------------------------- Wog::time replacement
 .globl time_hook

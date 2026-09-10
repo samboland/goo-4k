@@ -140,6 +140,14 @@ static BYTE* find_goo_marker(const char* marker) {
     }
     return nullptr;
 }
+static DWORD* g_debug_word = nullptr;
+static bool g_f5_down = false;
+static void poll_debug_keys() {
+    if (!g_debug_word) { BYTE* m = find_goo_marker("GOO4KDEBUG"); if (!m) return; g_debug_word = (DWORD*)(m + 12); }
+    bool down = (GetAsyncKeyState(VK_F5) & 0x8000) != 0;
+    if (down && !g_f5_down) { *g_debug_word = 1; logf("F5: debug burst"); }
+    g_f5_down = down;
+}
 static void apply_flags() {
     BYTE* m = find_goo_marker("GOO4KFLAGS");
     if (!m) { logf("no GOO4KFLAGS marker in exe"); return; }
@@ -306,6 +314,7 @@ static void present_frame() {
     if (SUCCEEDED(g_sc->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&bb))) {
         g_ctx->CopyResource(bb, g_shared); bb->Release();
     }
+    poll_debug_keys();
     wait_for_cap();
     UINT sync = (g_interval == 0) ? 0 : 1;
     UINT flags = (sync == 0 && g_tearing) ? DXGI_PRESENT_ALLOW_TEARING : 0;
