@@ -38,8 +38,8 @@ g_cur_save:  .fill 8,4,0
 g_sfx2x:     .asciz "@2x.png"
 g_tick:      .long 0
 g_anim_n:    .long 0
-g_anim_max:  .float 1.0        # ignore rate jumps larger than this per tick (loop wraps)
-             .long 0
+g_anim_max:  .float 0.15       # ignore time jumps larger than this per tick (restarts, loop wraps)
+g_body_max:  .float 200.0      # skip body lerp when it moved more than this in one tick (slot reuse)
 .p2align 4
 g_anim:      .space 8192         # 256 x {anim ptr, last t, prev t, tick_last, tick_prev, pad}
 .p2align 4
@@ -244,6 +244,16 @@ bloop:
     mov   [rsi+0x18], ecx
     mov   ecx, [rax+0x30]
     mov   [rsi+0x1c], ecx
+    movss xmm0, dword ptr [rax+0x28]    # reject teleports (slot reused by a new body)
+    subss xmm0, dword ptr [rsi+8]
+    andps xmm0, xmmword ptr [rip+g_absmask]
+    ucomiss xmm0, dword ptr [rip+g_body_max]
+    ja    bnext
+    movss xmm0, dword ptr [rax+0x2c]
+    subss xmm0, dword ptr [rsi+0xc]
+    andps xmm0, xmmword ptr [rip+g_absmask]
+    ucomiss xmm0, dword ptr [rip+g_body_max]
+    ja    bnext
     movss xmm1, dword ptr [rip+g_alpha]
     movss xmm0, dword ptr [rax+0x28]
     subss xmm0, dword ptr [rsi+8]
@@ -456,9 +466,21 @@ anim_new:
     mov   eax, dword ptr [rip+g_tick]
     mov   [r10+16], eax
     mov   [r10+20], eax
+    mov   [r10+24], eax
     jmp   anim_out
 anim_found:
-    ucomiss xmm1, dword ptr [r10+8]
+    mov   eax, dword ptr [rip+g_tick]
+    mov   r11d, eax
+    sub   r11d, [r10+24]                # ticks since last drawn
+    mov   [r10+24], eax
+    cmp   r11d, 2
+    jbe   4f
+    movss dword ptr [r10+8], xmm1       # stale entry (object went away): restart history
+    movss dword ptr [r10+12], xmm1
+    mov   [r10+16], eax
+    mov   [r10+20], eax
+    jmp   anim_out
+4:  ucomiss xmm1, dword ptr [r10+8]
     jp    2f
     je    3f
 2:  mov   eax, [r10+8]                  # value changed: shift history
@@ -486,6 +508,8 @@ anim_found:
     subss xmm5, dword ptr [rip+g_alpha]
     mulss xmm4, xmm5
     subss xmm1, xmm4
+    xorps xmm4, xmm4
+    maxss xmm1, xmm4                    # never below zero
 anim_out:
     push  rbx                           # relocated prologue of ANIM_EVAL
     push  rbp
