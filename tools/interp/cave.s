@@ -69,6 +69,9 @@ g_noclock:   .long 0
 g_anim_n:    .long 0
 g_anim_max:  .float 0.15       # ignore time jumps larger than this per tick (restarts, loop wraps)
 g_body_max:  .float 200.0      # skip body lerp when it moved more than this in one tick (slot reuse)
+.globl g_ol_gain
+g_ol_gain:   .float 0.0625     # font outline: alpha = clamp((boxblur - 0.02) * gain). Stock 100 makes the
+                               # outline edge binary (any coverage -> opaque); 1/16 ramps it over ~3 texels
 .p2align 4
 g_anim:      .space 32768        # ANIM_MAX x {anim ptr, last t, prev t, tick_last, tick_prev, tick_seen, continuous}
 .p2align 4

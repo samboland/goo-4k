@@ -72,6 +72,7 @@ In place, 123 bytes:
 | 0x140029e10 | keyframe evaluator entry -> `jmp anim_hook` (11-byte prologue relocated) |
 | 0x1400b109d | after the glyph rasteriser's `createImage` call -> `jmp glyph_hook` (8 bytes relocated) |
 | 0x1400c6520 | `SDL2Image` upload entry -> `jmp upload_hook` (10-byte prologue relocated) |
+| 0x1400b0e0b+4 | glyph rasteriser's outline gain load (100.0f) -> `g_ol_gain` in `.goo` (1/16): the outline pass is a box blur of the glyph with alpha = clamp((blur - 0.02) * gain); at 100 the edge is binary, at 1/16 it ramps over about 3 texels |
 
 Appended: the `.goo` section (about 11 KB) from `cave.s`:
 

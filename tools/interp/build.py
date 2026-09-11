@@ -78,6 +78,9 @@ for site in (0x1400bb355,0x1400bb7a4):                 # mov edx,4 -> 7
 o=va2off(0x1400d7c77)                                  # non-4x path scale 1.0 -> 0.5
 assert d[o:o+8]==bytes.fromhex('f30f1005c16e1d00'), d[o:o+8].hex()
 struct.pack_into('<i',d,o+4,0x1402af500-(0x1400d7c77+8))
+# --- font outline gain: movss xmm1,[rip+100.0f] in the glyph rasteriser -> g_ol_gain (antialiased outline edge)
+o=va2off(0x1400b0e0b); assert d[o:o+8]==bytes.fromhex('f30f100dd9eb1f00'), d[o:o+8].hex()
+struct.pack_into('<i',d,o+4,syms['g_ol_gain']-(0x1400b0e0b+8))
 # --- sanity: stock tick rate, stock time scale ---
 assert d[va2off(0x1400ab237)]==0x32
 assert d[va2off(0x140089020):va2off(0x140089020)+8]==bytes.fromhex('48c747500000803f')
