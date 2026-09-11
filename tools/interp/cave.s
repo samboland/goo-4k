@@ -31,9 +31,6 @@
 .set GL_GENMIP,  0x140367b20    # GL function table (GetProcAddress at startup): glGenerateMipmap
 .set GL_BINDTEX, 0x140368550    # glBindTexture
 .set GL_TEXPARI, 0x140368458    # glTexParameteri
-.set GL_TEXPARF, 0x140368448    # glTexParameterf
-.set C_MALLOC,   0x140285550    # CRT malloc (the glyph rasteriser's)
-.set C_FREE,     0x140284494    # CRT free
 .set BASE, 0x140398000
 .set ENTRY_SHIFT, 17            # 4096 bodies * 32 bytes per world slot
 .set ANIM_MAX, 1024             # tracked keyframe animation objects (32 bytes each)
@@ -70,12 +67,6 @@ g_st_marked: .long 0            # glyph images marked
 g_st_upl:    .long 0            # marked images reaching upload_hook with no texture yet
 g_st_mip:    .long 0            # mipmaps generated
 g_st_nogen:  .long 0            # glGenerateMipmap pointer was null
-g_lodmark:   .asciz "GOO4KLODB"
-             .byte 0, 0
-g_lod_bias:  .float 0.0          # GL_TEXTURE_LOD_BIAS for glyph textures (shim writes from ini font_lod_bias)
-g_softmark:  .asciz "GOO4KSOFT"
-             .byte 0, 0
-g_soften:    .long 3            # glyph_soften radius in texels, 0 = off (shim writes from ini font_soften)
 g_flagmark:  .asciz "GOO4KFLAGS"
              .byte 0
 g_flags:     .long 0xffffffff   # 1 bodies, 2 clock, 4 keyframe anims, 8 camera, 16 cursor, 32 particles, 64 font mipmaps (shim writes from ini)
@@ -84,12 +75,6 @@ g_noclock:   .long 0
 g_anim_n:    .long 0
 g_anim_max:  .float 0.15       # ignore time jumps larger than this per tick (restarts, loop wraps)
 g_body_max:  .float 200.0      # skip body lerp when it moved more than this in one tick (slot reuse)
-.globl g_ol_gain
-g_ol_gain:   .float 100.0      # (stock value; the edge is softened by glyph_soften instead)
-                               # font outline: alpha = clamp((boxblur - 0.02) * gain). Stock 100 makes the
-                               # outline edge binary (any coverage -> opaque); 1/6 ramps it over ~1 texel.
-                               # Wider ramps blur the corners (the box blur ramps slower there); the
-                               # straight-edge antialiasing comes from the glyph mipmaps.
 .p2align 4
 g_anim:      .space 32768        # ANIM_MAX x {anim ptr, last t, prev t, tick_last, tick_prev, tick_seen, continuous}
 .p2align 4
@@ -804,20 +789,9 @@ upload_hook:
     inc   dword ptr [rip+g_st_nogen]
     jmp   upload_cont
 1:
-    sub   rsp, 0x38                     # entry rsp%16==8 -> aligned for calls; +0x30 image, +0x20 5th arg
-    mov   [rsp+0x30], rcx
-    mov   r8d, dword ptr [rip+g_soften]
-    test  r8d, r8d
-    jz    2f
-    mov   rcx, [rcx+0x60]               # pixels (square RGBA8)
-    mov   rax, [rsp+0x30]
-    mov   edx, [rax+0x4c]               # size
-    lea   r9, [rip+_start+(C_MALLOC-BASE)]
-    lea   rax, [rip+_start+(C_FREE-BASE)]
-    mov   [rsp+0x20], rax
-    call  glyph_soften                  # widen + gamma-shape the outer alpha edge (soften.c)
-    mov   rcx, [rsp+0x30]
-2:  call  upload_cont                   # stock upload, leaves the texture bound
+    sub   rsp, 0x28                     # entry rsp%16==8 -> aligned for calls
+    mov   [rsp+0x20], rcx
+    call  upload_cont                   # stock upload, leaves the texture bound
     mov   ecx, 0xde1
     mov   edx, eax
     call  qword ptr [rip+_start+(GL_BINDTEX-BASE)]
@@ -831,14 +805,10 @@ upload_hook:
     mov   edx, 0x2801                   # GL_TEXTURE_MIN_FILTER
     mov   r8d, 0x2703                   # GL_LINEAR_MIPMAP_LINEAR
     call  qword ptr [rip+_start+(GL_TEXPARI-BASE)]
-    mov   ecx, 0xde1
-    mov   edx, 0x8501                   # GL_TEXTURE_LOD_BIAS: sample a slightly coarser mip -> wider edge ramps
-    movss xmm2, dword ptr [rip+g_lod_bias]
-    call  qword ptr [rip+_start+(GL_TEXPARF-BASE)]
     inc   dword ptr [rip+g_st_mip]
-    mov   rcx, [rsp+0x30]
+    mov   rcx, [rsp+0x20]
     mov   eax, [rcx+0x40]
-    add   rsp, 0x38
+    add   rsp, 0x28
     ret
 upload_cont:                            # relocated prologue, then the stock function
     mov   [rsp+8], rbx

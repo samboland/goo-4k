@@ -27,10 +27,7 @@ with tempfile.TemporaryDirectory() as t:
     stamp=datetime.datetime.now().strftime('%m-%d %H:%M')+' '+rev
     (t/'cave.s').write_text((here/'cave.s').read_text().replace('BUILD_STAMP',stamp))
     subprocess.check_call(['as','--64','-o',str(t/'c.o'),str(t/'cave.s')])
-    subprocess.check_call(['gcc','-c','-O2','-ffreestanding','-fno-builtin','-fno-tree-loop-distribute-patterns','-fno-stack-protector','-fno-asynchronous-unwind-tables','-mno-stack-arg-probe','-fno-jump-tables','-o',str(t/'soften.o'),str(here/'soften.c')])
-    und=[l for l in subprocess.check_output(['nm',str(t/'soften.o')]).decode().splitlines() if ' U ' in l]
-    assert not und, 'soften.c must be freestanding: '+' '.join(und)
-    subprocess.check_call(['ld',f'-Ttext={SEC_VA:#x}','-e','_start','-o',str(t/'c.elf'),str(t/'c.o'),str(t/'soften.o')],stderr=subprocess.DEVNULL)
+    subprocess.check_call(['ld',f'-Ttext={SEC_VA:#x}','-e','_start','-o',str(t/'c.elf'),str(t/'c.o')],stderr=subprocess.DEVNULL)
     subprocess.check_call(['objcopy','-O','binary','-j','.text',str(t/'c.elf'),str(t/'c.bin')])
     blob=(t/'c.bin').read_bytes()
     syms={l.split()[2]:int(l.split()[0],16) for l in subprocess.check_output(['nm',str(t/'c.elf')]).decode().splitlines() if len(l.split())==3}
@@ -81,9 +78,6 @@ for site in (0x1400bb355,0x1400bb7a4):                 # mov edx,4 -> 7
 o=va2off(0x1400d7c77)                                  # non-4x path scale 1.0 -> 0.5
 assert d[o:o+8]==bytes.fromhex('f30f1005c16e1d00'), d[o:o+8].hex()
 struct.pack_into('<i',d,o+4,0x1402af500-(0x1400d7c77+8))
-# --- font outline gain: movss xmm1,[rip+100.0f] in the glyph rasteriser -> g_ol_gain (antialiased outline edge)
-o=va2off(0x1400b0e0b); assert d[o:o+8]==bytes.fromhex('f30f100dd9eb1f00'), d[o:o+8].hex()
-struct.pack_into('<i',d,o+4,syms['g_ol_gain']-(0x1400b0e0b+8))
 # --- sanity: stock tick rate, stock time scale ---
 assert d[va2off(0x1400ab237)]==0x32
 assert d[va2off(0x140089020):va2off(0x140089020)+8]==bytes.fromhex('48c747500000803f')
