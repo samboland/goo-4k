@@ -33,7 +33,7 @@ def rescale(text: str, factor: float):
 if __name__ == '__main__':
     p = argparse.ArgumentParser(); p.add_argument('xml'); p.add_argument('--factor', type=float, default=2.0)
     a = p.parse_args()
-    path = pathlib.Path(a.xml); text = path.read_text(encoding='utf-8')
+    path = pathlib.Path(a.xml); text = path.read_text(encoding='utf-8', newline='')
     out, n = rescale(text, a.factor)
-    path.write_text(out, encoding='utf-8')
+    path.write_text(out, encoding='utf-8', newline='')
     print(f'{path}: {n} font entries rescaled by {a.factor}')
