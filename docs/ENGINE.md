@@ -103,7 +103,9 @@ Appended: the `.goo` section (about 11 KB) from `cave.s`:
   cannot be forced early (that gave use-after-free garbage).
 - `upload_hook`: on the lazy upload (`FUN_1400c6520`) of a marked image with no texture yet,
   runs the stock upload, then sets `GL_TEXTURE_MAX_LEVEL` back to 1000 (the engine clamps
-  every texture to 0), calls `glGenerateMipmap` and sets `GL_LINEAR_MIPMAP_LINEAR`. Needed
+  every texture to 0), calls
+  `glGenerateMipmap`, sets `GL_LINEAR_MIPMAP_LINEAR` and `GL_TEXTURE_LOD_BIAS` (`GOO4KLODB`
+  marker +12, float, shim writes ini `font_lod_bias`, default 0.5). Needed
   because the font entries are rasterised at 4x `pointSize` and drawn at a quarter scale;
   without mipmaps bilinear sampling skips texels and rotated text looks jagged. Flag 64.
 - Data markers read or written by the shim: `GOO4K:` build stamp, `GOO4KFLAGS` (+12: feature
