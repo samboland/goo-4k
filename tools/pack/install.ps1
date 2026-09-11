@@ -1,5 +1,6 @@
 # goo-4k installer: patches the stock World of Goo exe and SDL2.dll in place, installs the
-# presentation shim, optional 4x textures, and sets the framebuffer/vsync config lines.
+# presentation shim, the 4x font entries in resources.xml, optional 4x textures, and sets the
+# framebuffer/vsync config lines.
 # Run via install.cmd. Usage: install.ps1 [-GameDir <path>] [-Uninstall] [-NoTextures]
 param(
     [string]$GameDir = "",
@@ -69,6 +70,8 @@ if ($Uninstall) {
         $b = Join-Path $backup $f
         if (Test-Path $b) { Copy-Item $b (Join-Path $win64 $f) -Force; Write-Host "  restored $f" }
     }
+    $b = Join-Path $backup 'resources.xml'
+    if (Test-Path $b) { Copy-Item $b (Join-Path $game 'game\properties\resources.xml') -Force; Write-Host "  restored resources.xml" }
     Remove-Item (Join-Path $win64 'SDL2_real.dll') -ErrorAction SilentlyContinue
     $list = Join-Path $backup 'installed-textures.txt'
     if (Test-Path $list) { $n = 0; foreach ($rel in Get-Content $list) { $t = Join-Path $res $rel; if (Test-Path $t) { Remove-Item $t; $n++ } }; Write-Host "  removed $n texture files" }
@@ -93,6 +96,21 @@ Apply-Manifest (Join-Path $here 'patches\SDL2_real.dll.json') $real $backup
 if (-not (Test-Path (Join-Path $backup 'SDL2.dll'))) { New-Item -ItemType Directory -Force $backup | Out-Null; Copy-Item $sdl (Join-Path $backup 'SDL2.dll') -Force }
 Copy-Item (Join-Path $here 'files\SDL2.dll') $sdl -Force
 Write-Host "  SDL2.dll: presentation shim installed (stock kept as SDL2_real.dll)"
+
+# fonts: resources.xml with the font atlases rasterised at 4x (the exe hook mipmaps them)
+$resFile = Join-Path $game 'game\properties\resources.xml'
+$resJson = Join-Path $here 'patches\resources.xml.json'
+if ((Test-Path $resJson) -and (Test-Path $resFile)) {
+    $r = Get-Content $resJson -Raw | ConvertFrom-Json
+    $cur = Sha256 $resFile
+    if ($cur -eq $r.patched_sha256) { Write-Host "  resources.xml: already patched" }
+    elseif ($cur -eq $r.stock_sha256) {
+        New-Item -ItemType Directory -Force $backup | Out-Null
+        Copy-Item $resFile (Join-Path $backup 'resources.xml') -Force
+        Copy-Item (Join-Path $here 'files\resources.xml') $resFile -Force
+        Write-Host "  resources.xml: $($r.fonts) fonts rasterised at $($r.factor)x"
+    } else { Write-Host "  resources.xml: not the stock file (edited or another mod?), fonts left as they are" -ForegroundColor Yellow }
+}
 
 $tex = Join-Path $here 'textures\res'
 if (-not $NoTextures -and (Test-Path $tex)) {

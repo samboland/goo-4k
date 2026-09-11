@@ -41,6 +41,13 @@ addresses. `FUN_` names are Ghidra's.
   Particle effects (`SimpleParticleEffect` etc.) are per-tick and read `Wog::time` during draw;
   the effects factory is `FUN_140017690` / `FUN_1400175d0(factory, string* outId, string* name,
   float depth)`, and `EffectLauncher::tick` adds the effect with `FUN_140098870(scene, effect)`.
+- **Fonts.** FreeType + HarfBuzz, statically linked. `resources.xml` `<font>` entries carry
+  `pointSize` (raster size) and `scale` (draw scale); each glyph is its own square power-of-two
+  `SDL2Image` (RGBA, colour and outline composited on the CPU), uploaded lazily by
+  `FUN_1400c6520` with linear filtering and `GL_TEXTURE_MAX_LEVEL` 0. There are two texture
+  upload paths in the whole engine (`FUN_1400c12f0` for file images, `FUN_1400c6520` for
+  buffers); neither uses mipmaps. `tools/font_scale.py` multiplies `pointSize` and the pixel
+  attributes by a factor and divides `scale` by it (marker comment `<!-- goo4k:F -->`).
 - **Window.** Fullscreen already uses `SDL_WINDOW_FULLSCREEN_DESKTOP` (0x1001); the toggle
   persists `fullscreen,true|false` into `pers3.dat`. The game sets system DPI awareness. The
   bundled SDL2.dll is 2.0.9, which minimizes fullscreen windows on focus loss by default.
@@ -63,6 +70,7 @@ In place, 123 bytes:
 | Wog::vftable+0x30, WogRenderer::vftable+8, +0x10 | `tick_hook`, `draw_hook`, `fx_hook` |
 | 0x14008a920 | `Wog::time` entry -> `jmp time_hook` (function fully replaced) |
 | 0x140029e10 | keyframe evaluator entry -> `jmp anim_hook` (11-byte prologue relocated) |
+| 0x1400b109d | after the glyph rasteriser's `createImage` call -> `jmp glyph_hook` (8 bytes relocated) |
 
 Appended: the `.goo` section (about 11 KB) from `cave.s`:
 
@@ -83,6 +91,15 @@ Appended: the `.goo` section (about 11 KB) from `cave.s`:
   more than 0.15 per tick (restart or loop wrap), when the value changes within a tick
   (clock-driven, already smooth), when the entry was not drawn for two ticks (object went away),
   and for the particle-effect call site (0x140003762).
+- `fx_hook`, `pdraw_hook`, `pdraw_sh_hook`: the effects draw runs with the clock frozen; each
+  particle's draw position gets velocity x alpha added for the draw call and restored after
+  (`Particle`, `SuckEffectParticle`, `ShatterParticle` vtable slot +0x58).
+- `glyph_hook`: after `Font` rasterises a glyph into an `SDL2Image` (`FUN_1400b0960`, call at
+  0x1400b109a into `SDL2ResourceLoader` slot +0x28), uploads it right away via `FUN_1400c6520`,
+  sets `GL_TEXTURE_MAX_LEVEL` back to 1000 (the engine clamps every texture to 0), calls
+  `glGenerateMipmap` and sets `GL_LINEAR_MIPMAP_LINEAR`. Needed because the font entries are
+  rasterised at 4x `pointSize` and drawn at a quarter scale; without mipmaps bilinear sampling
+  skips texels and rotated text looks jagged. Flag 64.
 - Data markers read or written by the shim: `GOO4K:` build stamp, `GOO4KFLAGS` (+12: feature
   mask), `GOO4KDEBUG` (+12: command/status word).
 

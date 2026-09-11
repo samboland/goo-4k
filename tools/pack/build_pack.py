@@ -40,6 +40,14 @@ assert shim.exists(), 'build the shim first (sh tools/present/build.sh)'
 
 # 4. manifests + files
 (out / 'patches').mkdir(); (out / 'files').mkdir()
+# 4b. fonts: resources.xml with font atlases rasterised at 4x (tools/font_scale.py), plus stock/patched hashes
+import hashlib, importlib.util
+spec = importlib.util.spec_from_file_location('font_scale', root / 'tools/font_scale.py'); fs = importlib.util.module_from_spec(spec); spec.loader.exec_module(fs)
+stock_res = stock / 'game/properties/resources.xml'
+res_text, nfonts = fs.rescale(stock_res.read_text(encoding='utf-8'), 4.0)
+(out / 'files/resources.xml').write_text(res_text, encoding='utf-8', newline='')
+sha = lambda b: hashlib.sha256(b).hexdigest()
+(out / 'patches/resources.xml.json').write_text(json.dumps({'name': 'game/properties/resources.xml', 'stock_sha256': sha(stock_res.read_bytes()), 'patched_sha256': sha((out / 'files/resources.xml').read_bytes()), 'fonts': nfonts, 'factor': 4}, indent=1))
 subprocess.check_call([py, str(root / 'tools/pack/make_manifest.py'), str(stock_exe), str(patched_exe), str(out / 'patches/WorldOfGoo.exe.json'), '--name', 'WorldOfGoo.exe'])
 subprocess.check_call([py, str(root / 'tools/pack/make_manifest.py'), str(stock_sdl), str(real), str(out / 'patches/SDL2_real.dll.json'), '--name', 'SDL2_real.dll'])
 shutil.copy2(shim, out / 'files/SDL2.dll')

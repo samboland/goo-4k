@@ -54,7 +54,7 @@ g_burstname: .asciz "unlockburst"
              .space 4
 g_flagmark:  .asciz "GOO4KFLAGS"
              .byte 0
-g_flags:     .long 0xffffffff   # 1 bodies, 2 clock, 4 keyframe anims, 8 camera, 16 cursor (shim writes from ini)
+g_flags:     .long 0xffffffff   # 1 bodies, 2 clock, 4 keyframe anims, 8 camera, 16 cursor, 32 particles, 64 font mipmaps (shim writes from ini)
 g_tick:      .long 0
 g_noclock:   .long 0
 g_anim_n:    .long 0
@@ -723,3 +723,47 @@ pdraw_common:
 2:  add   rsp, 0x40
     pop   rbx
     ret
+
+# --- glyph_hook: detour at 0x1400b109d, right after the glyph rasteriser's createImage call
+# (Font glyph -> SDL2Image, FUN_1400b0960). Relocated: mov [rbp-0x50],rax ; mov rdx,[rbp+0x20].
+# Uploads the glyph texture now (the engine would do it lazily at first draw), then lifts the
+# GL_TEXTURE_MAX_LEVEL=0 clamp, generates mipmaps and sets LINEAR_MIPMAP_LINEAR minification.
+# Glyphs are rasterised at 4x pointSize and drawn at 0.125 scale, so plain bilinear skipped
+# texels and rotated text looked jagged. Flag 64.
+.globl glyph_hook
+glyph_hook:
+    mov   [rbp-0x50], rax               # relocated: keep the image pointer
+    test  rax, rax
+    jz    glyph_out
+    test  dword ptr [rip+g_flags], 64
+    jz    glyph_out
+    mov   r10, 0x140367b20              # glGenerateMipmap slot (GetProcAddress, may be null)
+    cmp   qword ptr [r10], 0
+    je    glyph_out
+    sub   rsp, 0x30                     # rsp%16==0 here (post-call), 0x20 shadow + scratch
+    mov   rcx, rax
+    mov   rax, 0x1400c6520              # SDL2Image::upload -> eax = GL texture id
+    call  rax
+    mov   [rsp+0x20], eax
+    mov   ecx, 0xde1
+    mov   edx, eax
+    mov   rax, 0x140368550              # glBindTexture
+    call  qword ptr [rax]
+    mov   ecx, 0xde1
+    mov   edx, 0x813d                   # GL_TEXTURE_MAX_LEVEL
+    mov   r8d, 1000
+    mov   rax, 0x140368458              # glTexParameteri
+    call  qword ptr [rax]
+    mov   ecx, 0xde1
+    mov   rax, 0x140367b20              # glGenerateMipmap
+    call  qword ptr [rax]
+    mov   ecx, 0xde1
+    mov   edx, 0x2801                   # GL_TEXTURE_MIN_FILTER
+    mov   r8d, 0x2703                   # GL_LINEAR_MIPMAP_LINEAR
+    mov   rax, 0x140368458
+    call  qword ptr [rax]
+    add   rsp, 0x30
+glyph_out:
+    mov   rdx, [rbp+0x20]               # relocated
+    mov   rax, 0x1400b10a5
+    jmp   rax

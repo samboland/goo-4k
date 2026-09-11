@@ -156,7 +156,7 @@ static void apply_flags() {
     if (!m) { logf("no GOO4KFLAGS marker in exe"); return; }
     DWORD* flags = (DWORD*)(m + 12);
     if (g_interp_flags >= 0) *flags = (DWORD)g_interp_flags;
-    logf("interp flags = %lu (1 bodies, 2 clock, 4 anims, 8 camera, 16 cursor)", *flags);
+    logf("interp flags = %lu (1 bodies, 2 clock, 4 anims, 8 camera, 16 cursor, 32 particles, 64 font mipmaps)", *flags);
 }
 
 static void find_exe_stamp(char* out, size_t n) {
