@@ -150,6 +150,9 @@ static void poll_debug_keys() {
     bool down = (GetAsyncKeyState(VK_F5) & 0x8000) != 0;
     if (down && !g_f5_down) { *g_debug_word = 1; logf("F5: debug burst"); }
     g_f5_down = down;
+    static DWORD* stats = nullptr; static DWORD last[4] = {0, 0, 0, 0}; static unsigned n = 0;
+    if (!stats) { BYTE* m = find_goo_marker("GOO4KSTATS"); if (m) stats = (DWORD*)(m + 12); }
+    if (stats && (++n % 120) == 0 && memcmp(stats, last, sizeof last) != 0) { memcpy(last, stats, sizeof last); logf("font stats: marked=%lu uploads=%lu mipmapped=%lu genmip_null=%lu", stats[0], stats[1], stats[2], stats[3]); }
 }
 static void apply_flags() {
     BYTE* m = find_goo_marker("GOO4KFLAGS");

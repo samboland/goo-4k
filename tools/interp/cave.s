@@ -61,6 +61,12 @@ g_dbgmark:   .asciz "GOO4KDEBUG"
 g_debug:     .long 0            # shim writes 1 on F5: spawn an unlock burst at the camera
 g_burstname: .asciz "unlockburst"
              .space 4
+g_statmark:  .asciz "GOO4KSTATS"
+             .byte 0
+g_st_marked: .long 0            # glyph images marked
+g_st_upl:    .long 0            # marked images reaching upload_hook with no texture yet
+g_st_mip:    .long 0            # mipmaps generated
+g_st_nogen:  .long 0            # glGenerateMipmap pointer was null
 g_flagmark:  .asciz "GOO4KFLAGS"
              .byte 0
 g_flags:     .long 0xffffffff   # 1 bodies, 2 clock, 4 keyframe anims, 8 camera, 16 cursor, 32 particles, 64 font mipmaps (shim writes from ini)
@@ -70,8 +76,10 @@ g_anim_n:    .long 0
 g_anim_max:  .float 0.15       # ignore time jumps larger than this per tick (restarts, loop wraps)
 g_body_max:  .float 200.0      # skip body lerp when it moved more than this in one tick (slot reuse)
 .globl g_ol_gain
-g_ol_gain:   .float 0.0625     # font outline: alpha = clamp((boxblur - 0.02) * gain). Stock 100 makes the
-                               # outline edge binary (any coverage -> opaque); 1/16 ramps it over ~3 texels
+g_ol_gain:   .float 0.1667     # font outline: alpha = clamp((boxblur - 0.02) * gain). Stock 100 makes the
+                               # outline edge binary (any coverage -> opaque); 1/6 ramps it over ~1 texel.
+                               # Wider ramps blur the corners (the box blur ramps slower there); the
+                               # straight-edge antialiasing comes from the glyph mipmaps.
 .p2align 4
 g_anim:      .space 32768        # ANIM_MAX x {anim ptr, last t, prev t, tick_last, tick_prev, tick_seen, continuous}
 .p2align 4
@@ -760,6 +768,7 @@ glyph_hook:
     test  rax, rax
     jz    glyph_out
     mov   dword ptr [rax+0x5c], GLYPH_MAGIC
+    inc   dword ptr [rip+g_st_marked]
 glyph_out:
     mov   rdx, [rbp+0x20]               # relocated
     jmp   _start+(GLYPH_BACK-BASE)
@@ -779,8 +788,12 @@ upload_hook:
     jne   upload_cont
     cmp   qword ptr [rcx+0x60], 0       # no pixels
     je    upload_cont
+    inc   dword ptr [rip+g_st_upl]
     cmp   qword ptr [rip+_start+(GL_GENMIP-BASE)], 0
-    je    upload_cont
+    jne   1f
+    inc   dword ptr [rip+g_st_nogen]
+    jmp   upload_cont
+1:
     sub   rsp, 0x28                     # entry rsp%16==8 -> aligned for calls
     mov   [rsp+0x20], rcx
     call  upload_cont                   # stock upload, leaves the texture bound
@@ -797,6 +810,7 @@ upload_hook:
     mov   edx, 0x2801                   # GL_TEXTURE_MIN_FILTER
     mov   r8d, 0x2703                   # GL_LINEAR_MIPMAP_LINEAR
     call  qword ptr [rip+_start+(GL_TEXPARI-BASE)]
+    inc   dword ptr [rip+g_st_mip]
     mov   rcx, [rsp+0x20]
     mov   eax, [rcx+0x40]
     add   rsp, 0x28
