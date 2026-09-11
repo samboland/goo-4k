@@ -31,6 +31,7 @@
 .set GL_GENMIP,  0x140367b20    # GL function table (GetProcAddress at startup): glGenerateMipmap
 .set GL_BINDTEX, 0x140368550    # glBindTexture
 .set GL_TEXPARI, 0x140368458    # glTexParameteri
+.set GL_TEXPARF, 0x140368448    # glTexParameterf
 .set BASE, 0x140398000
 .set ENTRY_SHIFT, 17            # 4096 bodies * 32 bytes per world slot
 .set ANIM_MAX, 1024             # tracked keyframe animation objects (32 bytes each)
@@ -67,6 +68,9 @@ g_st_marked: .long 0            # glyph images marked
 g_st_upl:    .long 0            # marked images reaching upload_hook with no texture yet
 g_st_mip:    .long 0            # mipmaps generated
 g_st_nogen:  .long 0            # glGenerateMipmap pointer was null
+g_lodmark:   .asciz "GOO4KLODB"
+             .byte 0, 0
+g_lod_bias:  .float 0.5          # GL_TEXTURE_LOD_BIAS for glyph textures (shim writes from ini font_lod_bias)
 g_flagmark:  .asciz "GOO4KFLAGS"
              .byte 0
 g_flags:     .long 0xffffffff   # 1 bodies, 2 clock, 4 keyframe anims, 8 camera, 16 cursor, 32 particles, 64 font mipmaps (shim writes from ini)
@@ -810,6 +814,10 @@ upload_hook:
     mov   edx, 0x2801                   # GL_TEXTURE_MIN_FILTER
     mov   r8d, 0x2703                   # GL_LINEAR_MIPMAP_LINEAR
     call  qword ptr [rip+_start+(GL_TEXPARI-BASE)]
+    mov   ecx, 0xde1
+    mov   edx, 0x8501                   # GL_TEXTURE_LOD_BIAS: sample a slightly coarser mip -> wider edge ramps
+    movss xmm2, dword ptr [rip+g_lod_bias]
+    call  qword ptr [rip+_start+(GL_TEXPARF-BASE)]
     inc   dword ptr [rip+g_st_mip]
     mov   rcx, [rsp+0x20]
     mov   eax, [rcx+0x40]
