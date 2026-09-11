@@ -87,7 +87,8 @@ Appended: the `.goo` section (about 11 KB) from `cave.s`:
   the live mouse position into each cursor head; sets dirty bytes; calls the stock draw; restores.
 - `time_hook`: stock formula, plus alpha ticks only while inside draw and only for the three
   animation call sites. Every other reader sees tick-exact time.
-- `anim_hook`: per animation object, remembers the last two tick values and the tick they
+- `anim_hook`: per animation object (table of 1024; when full, a slot not drawn for more than
+  two ticks is reused), remembers the last two tick values and the tick they
   changed; while drawing, interpolates `t = last - (1 - alpha) * rate`. Holds when the rate jumps
   more than 0.15 per tick (restart or loop wrap), when the value changes within a tick
   (clock-driven, already smooth), when the entry was not drawn for two ticks (object went away),

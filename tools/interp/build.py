@@ -13,7 +13,7 @@ d=bytearray(open(a.src,'rb').read())
 pe=struct.unpack_from('<I',d,0x3c)[0]; opt=pe+24
 nsec=struct.unpack_from('<H',d,pe+6)[0]; optsize=struct.unpack_from('<H',d,pe+20)[0]
 sec=lambda i: pe+24+optsize+i*40
-IMG=0x140000000; SEC_RVA=0x398000; SEC_VA=IMG+SEC_RVA; SEC_VSIZE=0x4000
+IMG=0x140000000; SEC_RVA=0x398000; SEC_VA=IMG+SEC_RVA; SEC_VSIZE=0x10000
 names=[bytes(d[sec(i):sec(i)+8]).rstrip(b'\0') for i in range(nsec)]
 assert names[-1]==b'.reloc', names
 assert struct.unpack_from('<I',d,opt+56)[0]==SEC_RVA, 'unexpected SizeOfImage'

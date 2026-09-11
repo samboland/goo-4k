@@ -33,6 +33,7 @@
 .set GL_TEXPARI, 0x140368458    # glTexParameteri
 .set BASE, 0x140398000
 .set ENTRY_SHIFT, 17            # 4096 bodies * 32 bytes per world slot
+.set ANIM_MAX, 1024             # tracked keyframe animation objects (32 bytes each)
 .text
 .globl _start
 _start:
@@ -69,7 +70,7 @@ g_anim_n:    .long 0
 g_anim_max:  .float 0.15       # ignore time jumps larger than this per tick (restarts, loop wraps)
 g_body_max:  .float 200.0      # skip body lerp when it moved more than this in one tick (slot reuse)
 .p2align 4
-g_anim:      .space 8192         # 256 x {anim ptr, last t, prev t, tick_last, tick_prev, pad}
+g_anim:      .space 32768        # ANIM_MAX x {anim ptr, last t, prev t, tick_last, tick_prev, tick_seen, continuous}
 .p2align 4
 
 # ---------------------------------------------------------------- Scene::tick hook
@@ -603,9 +604,23 @@ anim_hook:
     inc   eax
     jmp   1b
 anim_new:
-    cmp   r11d, 256
-    jae   anim_out
+    cmp   r11d, ANIM_MAX
+    jae   anim_evict
     inc   dword ptr [rip+g_anim_n]
+    jmp   anim_fill
+anim_evict:                             # table full: reuse a slot not drawn for more than two ticks
+    lea   r10, [rip+g_anim]
+    xor   r11d, r11d
+5:  cmp   r11d, ANIM_MAX
+    jae   anim_out
+    mov   eax, dword ptr [rip+g_tick]
+    sub   eax, [r10+24]
+    cmp   eax, 2
+    ja    anim_fill
+    add   r10, 32
+    inc   r11d
+    jmp   5b
+anim_fill:
     mov   [r10], rcx
     movss dword ptr [r10+8], xmm1
     movss dword ptr [r10+12], xmm1
