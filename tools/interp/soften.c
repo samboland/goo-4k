@@ -4,8 +4,7 @@
  * outline over a light background looks heavy: 50% coverage reads as ~75% black. This widens the
  * alpha ramp at the glyph's outer edge by a box blur of radius r texels (RGB is untouched inside
  * the opaque area, so the fill/outline boundary stays sharp), extends the edge colour into the
- * newly covered transparent texels, and reshapes alpha with a gamma-2 curve so mid coverage
- * reads as mid grey.
+ * newly covered transparent texels. The ramp stays linear in alpha.
  *
  * Freestanding: no libc, no static data (the .goo section only carries .text). Integer math only.
  * Built by build.py with gcc and linked into the cave; Win64 ABI.
@@ -24,13 +23,8 @@ void glyph_soften(u8* px, int size, int r, void* (*alloc)(usz), void (*release)(
     int* rmax = rmin + n;
     u8* lut = (u8*)(rmax + n);
 
-    /* gamma-2 reshape LUT: a' = 255 - sqrt((255 - a) * 255) */
-    for (int a = 0; a < 256; a++) {
-        unsigned v = (unsigned)(255 - a) * 255u, s = 0, bit = 1u << 14;
-        while (bit > v) bit >>= 2;
-        while (bit) { if (v >= s + bit) { v -= s + bit; s = (s >> 1) + bit; } else s >>= 1; bit >>= 2; }
-        lut[a] = (u8)(255 - (int)s);
-    }
+    /* identity LUT (a gamma-2 reshape was tried: it turns the ramp into a hard step plus a light halo) */
+    for (int a = 0; a < 256; a++) lut[a] = (u8)a;
 
     for (int y = 0; y < n; y++) {
         u8* row = px + (usz)y * n * 4;
