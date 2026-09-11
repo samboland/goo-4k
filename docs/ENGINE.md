@@ -71,6 +71,7 @@ In place, 123 bytes:
 | 0x14008a920 | `Wog::time` entry -> `jmp time_hook` (function fully replaced) |
 | 0x140029e10 | keyframe evaluator entry -> `jmp anim_hook` (11-byte prologue relocated) |
 | 0x1400b109d | after the glyph rasteriser's `createImage` call -> `jmp glyph_hook` (8 bytes relocated) |
+| 0x1400c6520 | `SDL2Image` upload entry -> `jmp upload_hook` (10-byte prologue relocated) |
 
 Appended: the `.goo` section (about 11 KB) from `cave.s`:
 
@@ -95,11 +96,14 @@ Appended: the `.goo` section (about 11 KB) from `cave.s`:
   particle's draw position gets velocity x alpha added for the draw call and restored after
   (`Particle`, `SuckEffectParticle`, `ShatterParticle` vtable slot +0x58).
 - `glyph_hook`: after `Font` rasterises a glyph into an `SDL2Image` (`FUN_1400b0960`, call at
-  0x1400b109a into `SDL2ResourceLoader` slot +0x28), uploads it right away via `FUN_1400c6520`,
-  sets `GL_TEXTURE_MAX_LEVEL` back to 1000 (the engine clamps every texture to 0), calls
-  `glGenerateMipmap` and sets `GL_LINEAR_MIPMAP_LINEAR`. Needed because the font entries are
-  rasterised at 4x `pointSize` and drawn at a quarter scale; without mipmaps bilinear sampling
-  skips texels and rotated text looks jagged. Flag 64.
+  0x1400b109a into `SDL2ResourceLoader` slot +0x28), writes a marker into the unused padding at
+  image+0x5c. The rasteriser keeps writing into the pixel buffer after that call, so the upload
+  cannot be forced early (that gave use-after-free garbage).
+- `upload_hook`: on the lazy upload (`FUN_1400c6520`) of a marked image with no texture yet,
+  runs the stock upload, then sets `GL_TEXTURE_MAX_LEVEL` back to 1000 (the engine clamps
+  every texture to 0), calls `glGenerateMipmap` and sets `GL_LINEAR_MIPMAP_LINEAR`. Needed
+  because the font entries are rasterised at 4x `pointSize` and drawn at a quarter scale;
+  without mipmaps bilinear sampling skips texels and rotated text looks jagged. Flag 64.
 - Data markers read or written by the shim: `GOO4K:` build stamp, `GOO4KFLAGS` (+12: feature
   mask), `GOO4KDEBUG` (+12: command/status word).
 

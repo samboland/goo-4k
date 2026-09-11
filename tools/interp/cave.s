@@ -26,6 +26,8 @@
 .set PFX_DRAW,   0x140003762    # return address of the evaluator call in the particle effect draw
 .set IMG_UPLOAD, 0x1400c6520    # SDL2Image upload (lazy glTexImage2D) -> GL id
 .set GLYPH_BACK, 0x1400b10a5
+.set UPLOAD_BACK, 0x1400c652a   # IMG_UPLOAD after its first two home-slot stores
+.set GLYPH_MAGIC, 0x4b344f47    # 'GO4K' in the unused padding at SDL2Image+0x5c
 .set GL_GENMIP,  0x140367b20    # GL function table (GetProcAddress at startup): glGenerateMipmap
 .set GL_BINDTEX, 0x140368550    # glBindTexture
 .set GL_TEXPARI, 0x140368458    # glTexParameteri
@@ -732,23 +734,38 @@ pdraw_common:
 
 # --- glyph_hook: detour at 0x1400b109d, right after the glyph rasteriser's createImage call
 # (Font glyph -> SDL2Image, FUN_1400b0960). Relocated: mov [rbp-0x50],rax ; mov rdx,[rbp+0x20].
-# Uploads the glyph texture now (the engine would do it lazily at first draw), then lifts the
-# GL_TEXTURE_MAX_LEVEL=0 clamp, generates mipmaps and sets LINEAR_MIPMAP_LINEAR minification.
-# Glyphs are rasterised at 4x pointSize and drawn at 0.125 scale, so plain bilinear skipped
-# texels and rotated text looked jagged. Flag 64.
+# Only marks the image as a glyph (SDL2Image+0x5c is padding). The rasteriser keeps writing
+# into the pixel buffer after createImage, so the upload has to stay lazy.
 .globl glyph_hook
 glyph_hook:
     mov   [rbp-0x50], rax               # relocated: keep the image pointer
     test  rax, rax
     jz    glyph_out
+    mov   dword ptr [rax+0x5c], GLYPH_MAGIC
+glyph_out:
+    mov   rdx, [rbp+0x20]               # relocated
+    jmp   _start+(GLYPH_BACK-BASE)
+
+# --- upload_hook: detour at IMG_UPLOAD (SDL2Image lazy upload, rcx=image, returns GL id).
+# For marked glyph images on their first upload: run the stock upload, then lift the
+# GL_TEXTURE_MAX_LEVEL=0 clamp, generate mipmaps and set LINEAR_MIPMAP_LINEAR minification.
+# Glyphs are rasterised at 4x pointSize and drawn at 0.125 scale, so plain bilinear skipped
+# texels and rotated text looked jagged. Flag 64.
+.globl upload_hook
+upload_hook:
     test  dword ptr [rip+g_flags], 64
-    jz    glyph_out
-    cmp   qword ptr [rip+_start+(GL_GENMIP-BASE)], 0   # GetProcAddress result, may be null
-    je    glyph_out
-    sub   rsp, 0x30                     # rsp%16==0 here (post-call), 0x20 shadow + scratch
-    mov   rcx, rax
-    call  _start+(IMG_UPLOAD-BASE)      # -> eax = GL texture id
-    mov   [rsp+0x20], eax
+    jz    upload_cont
+    cmp   dword ptr [rcx+0x5c], GLYPH_MAGIC
+    jne   upload_cont
+    cmp   dword ptr [rcx+0x40], 0       # already has a texture
+    jne   upload_cont
+    cmp   qword ptr [rcx+0x60], 0       # no pixels
+    je    upload_cont
+    cmp   qword ptr [rip+_start+(GL_GENMIP-BASE)], 0
+    je    upload_cont
+    sub   rsp, 0x28                     # entry rsp%16==8 -> aligned for calls
+    mov   [rsp+0x20], rcx
+    call  upload_cont                   # stock upload, leaves the texture bound
     mov   ecx, 0xde1
     mov   edx, eax
     call  qword ptr [rip+_start+(GL_BINDTEX-BASE)]
@@ -762,7 +779,11 @@ glyph_hook:
     mov   edx, 0x2801                   # GL_TEXTURE_MIN_FILTER
     mov   r8d, 0x2703                   # GL_LINEAR_MIPMAP_LINEAR
     call  qword ptr [rip+_start+(GL_TEXPARI-BASE)]
-    add   rsp, 0x30
-glyph_out:
-    mov   rdx, [rbp+0x20]               # relocated
-    jmp   _start+(GLYPH_BACK-BASE)
+    mov   rcx, [rsp+0x20]
+    mov   eax, [rcx+0x40]
+    add   rsp, 0x28
+    ret
+upload_cont:                            # relocated prologue, then the stock function
+    mov   [rsp+8], rbx
+    mov   [rsp+0x10], rbp
+    jmp   _start+(UPLOAD_BACK-BASE)
