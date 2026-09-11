@@ -52,8 +52,8 @@ function Fetch([string]$url, [string]$dest) {
 
 # ---- release
 if ($From) {
-    $installerZip = Get-ChildItem (Join-Path $From 'goo4k-*.zip') -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike 'goo4k-textures-*' } | Select-Object -First 1
-    $texturesZip = Get-ChildItem (Join-Path $From 'goo4k-textures-*.zip') -ErrorAction SilentlyContinue | Select-Object -First 1
+    $installerZip = Get-ChildItem (Join-Path $From 'goo4k-*.zip') -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike 'goo4k-textures-*' } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    $texturesZip = Get-ChildItem (Join-Path $From 'goo4k-textures-*.zip') -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if (-not $installerZip) { throw "no goo4k-*.zip in $From" }
     $installerUrl = $installerZip.FullName
     $texturesUrl = if ($texturesZip) { $texturesZip.FullName } else { $null }
