@@ -23,6 +23,12 @@
 .set ANIM_BACK,  0x140029e1b
 .set PDRAW,      0x14006d8c0    # Particle draw (vtable +0x58) for Particle and SuckEffectParticle
 .set PDRAW_SH,   0x14007ed40    # ShatterParticle draw (vtable +0x58)
+.set PFX_DRAW,   0x140003762    # return address of the evaluator call in the particle effect draw
+.set IMG_UPLOAD, 0x1400c6520    # SDL2Image upload (lazy glTexImage2D) -> GL id
+.set GLYPH_BACK, 0x1400b10a5
+.set GL_GENMIP,  0x140367b20    # GL function table (GetProcAddress at startup): glGenerateMipmap
+.set GL_BINDTEX, 0x140368550    # glBindTexture
+.set GL_TEXPARI, 0x140368458    # glTexParameteri
 .set BASE, 0x140398000
 .set ENTRY_SHIFT, 17            # 4096 bodies * 32 bytes per world slot
 .text
@@ -581,7 +587,7 @@ anim_hook:
     je    anim_out
     test  dword ptr [rip+g_flags], 4
     jz    anim_out
-    mov   rax, 0x140003762              # particle effect draw: per-particle anims churn, no interpolation
+    lea   rax, [rip+_start+(PFX_DRAW-BASE)]   # particle effect draw: per-particle anims churn, no interpolation
     cmp   [rsp], rax
     je    anim_out
     lea   r10, [rip+g_anim]
@@ -737,33 +743,26 @@ glyph_hook:
     jz    glyph_out
     test  dword ptr [rip+g_flags], 64
     jz    glyph_out
-    mov   r10, 0x140367b20              # glGenerateMipmap slot (GetProcAddress, may be null)
-    cmp   qword ptr [r10], 0
+    cmp   qword ptr [rip+_start+(GL_GENMIP-BASE)], 0   # GetProcAddress result, may be null
     je    glyph_out
     sub   rsp, 0x30                     # rsp%16==0 here (post-call), 0x20 shadow + scratch
     mov   rcx, rax
-    mov   rax, 0x1400c6520              # SDL2Image::upload -> eax = GL texture id
-    call  rax
+    call  _start+(IMG_UPLOAD-BASE)      # -> eax = GL texture id
     mov   [rsp+0x20], eax
     mov   ecx, 0xde1
     mov   edx, eax
-    mov   rax, 0x140368550              # glBindTexture
-    call  qword ptr [rax]
+    call  qword ptr [rip+_start+(GL_BINDTEX-BASE)]
     mov   ecx, 0xde1
     mov   edx, 0x813d                   # GL_TEXTURE_MAX_LEVEL
     mov   r8d, 1000
-    mov   rax, 0x140368458              # glTexParameteri
-    call  qword ptr [rax]
+    call  qword ptr [rip+_start+(GL_TEXPARI-BASE)]
     mov   ecx, 0xde1
-    mov   rax, 0x140367b20              # glGenerateMipmap
-    call  qword ptr [rax]
+    call  qword ptr [rip+_start+(GL_GENMIP-BASE)]
     mov   ecx, 0xde1
     mov   edx, 0x2801                   # GL_TEXTURE_MIN_FILTER
     mov   r8d, 0x2703                   # GL_LINEAR_MIPMAP_LINEAR
-    mov   rax, 0x140368458
-    call  qword ptr [rax]
+    call  qword ptr [rip+_start+(GL_TEXPARI-BASE)]
     add   rsp, 0x30
 glyph_out:
     mov   rdx, [rbp+0x20]               # relocated
-    mov   rax, 0x1400b10a5
-    jmp   rax
+    jmp   _start+(GLYPH_BACK-BASE)
