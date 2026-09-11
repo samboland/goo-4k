@@ -224,6 +224,8 @@ static bool create_shared(int w, int h) {
     td.Format = DXGI_FORMAT_B8G8R8A8_UNORM; td.SampleDesc.Count = 1;
     td.Usage = D3D11_USAGE_DEFAULT; td.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
     if (FAILED(g_dev->CreateTexture2D(&td, nullptr, &g_shared))) { logf("CreateTexture2D failed"); return false; }
+    { ID3D11RenderTargetView* rtv = nullptr;          // fresh video memory is undefined; start from black
+      if (SUCCEEDED(g_dev->CreateRenderTargetView(g_shared, nullptr, &rtv))) { const float black[4] = {0, 0, 0, 1}; g_ctx->ClearRenderTargetView(rtv, black); rtv->Release(); } }
     glGenTextures(1, &g_tex);
     g_sharedH = p_wglDXRegisterObjectNV(g_interop, g_shared, g_tex, GL_TEXTURE_2D, WGL_ACCESS_WRITE_DISCARD_NV);
     if (!g_sharedH) { logf("wglDXRegisterObjectNV failed (%lu)", GetLastError()); return false; }
@@ -308,6 +310,13 @@ static void present_frame() {
     p_glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     glReadBuffer(GL_BACK);
     p_glBlitFramebuffer(0, 0, w, h, 0, h, w, 0, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    {   // force alpha = 1: the game leaves translucent pixels in its back buffer (GL swap ignores them,
+        // a flip-model swapchain in HDR mode can composite them and show the desktop through)
+        GLfloat cc[4]; GLboolean cm[4]; glGetFloatv(GL_COLOR_CLEAR_VALUE, cc); glGetBooleanv(GL_COLOR_WRITEMASK, cm);
+        GLboolean sc = glIsEnabled(GL_SCISSOR_TEST); if (sc) glDisable(GL_SCISSOR_TEST);
+        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE); glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
+        glColorMask(cm[0], cm[1], cm[2], cm[3]); glClearColor(cc[0], cc[1], cc[2], cc[3]); if (sc) glEnable(GL_SCISSOR_TEST);
+    }
     p_glBindFramebuffer(GL_READ_FRAMEBUFFER, prevRead); p_glBindFramebuffer(GL_DRAW_FRAMEBUFFER, prevDraw);
     p_wglDXUnlockObjectsNV(g_interop, 1, &g_sharedH);
     overlay_draw();
