@@ -3,3 +3,4 @@ work/
 *.dll
 __pycache__/
 dist/
+*.lnk
