@@ -342,17 +342,18 @@ static void present_frame() {
     // frame timing: log slow frames with what the exe did in them (debug only)
     static LARGE_INTEGER t0 = {}, tprev = {}, tfreq = {}; LARGE_INTEGER tnow; QueryPerformanceCounter(&tnow);
     if (!tfreq.QuadPart) { QueryPerformanceFrequency(&tfreq); t0 = tprev = tnow; }
-    static DWORD sprev[7] = {0}; static unsigned long long uplprev = 0, softprev = 0;
+    static DWORD sprev[7] = {0}; static unsigned long long uplprev = 0, softprev = 0, mipprev = 0;
     if (g_debug_keys && g_frames > 10) {
         double ms = (tnow.QuadPart - tprev.QuadPart) * 1000.0 / tfreq.QuadPart;
         if (ms > 25.0) {
             DWORD d[7] = {0}; if (g_stats) for (int i = 0; i < 6; i++) d[i] = g_stats[i] - sprev[i];
             double upms = g_stats ? (double)(*(unsigned long long*)&g_stats[7] - uplprev) * 1000.0 / tfreq.QuadPart : 0;
             double softms = g_stats ? (double)(*(unsigned long long*)&g_stats[29] - softprev) * 1000.0 / tfreq.QuadPart : 0;
-            logf("slow frame %.1f ms at %.1f s: glyph_uploads+%lu (%.1f ms total, %.1f ms of it soften) draws+%lu anim_holds+%lu", ms, (tnow.QuadPart - t0.QuadPart) / (double)tfreq.QuadPart, d[1], upms, softms, d[4], d[5]);
+            double mipms = g_stats ? (double)(*(unsigned long long*)&g_stats[31] - mipprev) * 1000.0 / tfreq.QuadPart : 0;
+            logf("slow frame %.1f ms at %.1f s: glyph_uploads+%lu (%.1f ms total: soften %.1f, mipmaps %.1f) draws+%lu anim_holds+%lu", ms, (tnow.QuadPart - t0.QuadPart) / (double)tfreq.QuadPart, d[1], upms, softms, mipms, d[4], d[5]);
         }
     }
-    if (g_stats) { memcpy(sprev, g_stats, sizeof sprev); uplprev = *(unsigned long long*)&g_stats[7]; softprev = *(unsigned long long*)&g_stats[29]; }
+    if (g_stats) { memcpy(sprev, g_stats, sizeof sprev); uplprev = *(unsigned long long*)&g_stats[7]; softprev = *(unsigned long long*)&g_stats[29]; mipprev = *(unsigned long long*)&g_stats[31]; }
     tprev = tnow;
 
     // the GL drawable can lag the client rect for a frame or two around resizes; never read past it
