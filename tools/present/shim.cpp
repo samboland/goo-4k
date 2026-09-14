@@ -160,7 +160,7 @@ static void poll_debug_keys() {
     if (down && !g_f5_down) { *g_debug_word = 1; logf("F5: debug burst"); }
     g_f5_down = down;
     static DWORD last[7] = {0}; static unsigned n = 0;
-    if (g_stats && (++n % 120) == 0 && memcmp(g_stats, last, sizeof last) != 0) { memcpy(last, g_stats, sizeof last); logf("font stats: marked=%lu uploads=%lu mipmapped=%lu draws=%lu anim_holds=%lu last_hold_rate=%.4f hold_hist(<.2 <.3 <.5 <1 <2 <5 <20 >=20)=%lu %lu %lu %lu %lu %lu %lu %lu", g_stats[0], g_stats[1], g_stats[2], g_stats[4], g_stats[5], *(float*)&g_stats[6], g_stats[9], g_stats[10], g_stats[11], g_stats[12], g_stats[13], g_stats[14], g_stats[15], g_stats[16]); }
+    if (g_stats && (++n % 120) == 0 && memcmp(g_stats, last, sizeof last) != 0) { memcpy(last, g_stats, sizeof last); logf("font stats: marked=%lu uploads=%lu mipmapped=%lu draws=%lu anim_holds=%lu last_hold_rate=%.4f hold_hist(<.2 <.3 <.5 <1 <2 <5 <20 >=20)=%lu %lu %lu %lu %lu %lu %lu %lu neg_holds=%lu", g_stats[0], g_stats[1], g_stats[2], g_stats[4], g_stats[5], *(float*)&g_stats[6], g_stats[9], g_stats[10], g_stats[11], g_stats[12], g_stats[13], g_stats[14], g_stats[15], g_stats[16], g_stats[28]); }
 }
 static void apply_flags() {
     BYTE* m = find_goo_marker("GOO4KFLAGS");
@@ -342,16 +342,17 @@ static void present_frame() {
     // frame timing: log slow frames with what the exe did in them (debug only)
     static LARGE_INTEGER t0 = {}, tprev = {}, tfreq = {}; LARGE_INTEGER tnow; QueryPerformanceCounter(&tnow);
     if (!tfreq.QuadPart) { QueryPerformanceFrequency(&tfreq); t0 = tprev = tnow; }
-    static DWORD sprev[7] = {0}; static unsigned long long uplprev = 0;
+    static DWORD sprev[7] = {0}; static unsigned long long uplprev = 0, softprev = 0;
     if (g_debug_keys && g_frames > 10) {
         double ms = (tnow.QuadPart - tprev.QuadPart) * 1000.0 / tfreq.QuadPart;
         if (ms > 25.0) {
             DWORD d[7] = {0}; if (g_stats) for (int i = 0; i < 6; i++) d[i] = g_stats[i] - sprev[i];
             double upms = g_stats ? (double)(*(unsigned long long*)&g_stats[7] - uplprev) * 1000.0 / tfreq.QuadPart : 0;
-            logf("slow frame %.1f ms at %.1f s: glyph_uploads+%lu (%.1f ms in soften/upload/mipmap) draws+%lu anim_holds+%lu", ms, (tnow.QuadPart - t0.QuadPart) / (double)tfreq.QuadPart, d[1], upms, d[4], d[5]);
+            double softms = g_stats ? (double)(*(unsigned long long*)&g_stats[29] - softprev) * 1000.0 / tfreq.QuadPart : 0;
+            logf("slow frame %.1f ms at %.1f s: glyph_uploads+%lu (%.1f ms total, %.1f ms of it soften) draws+%lu anim_holds+%lu", ms, (tnow.QuadPart - t0.QuadPart) / (double)tfreq.QuadPart, d[1], upms, softms, d[4], d[5]);
         }
     }
-    if (g_stats) { memcpy(sprev, g_stats, sizeof sprev); uplprev = *(unsigned long long*)&g_stats[7]; }
+    if (g_stats) { memcpy(sprev, g_stats, sizeof sprev); uplprev = *(unsigned long long*)&g_stats[7]; softprev = *(unsigned long long*)&g_stats[29]; }
     tprev = tnow;
 
     // the GL drawable can lag the client rect for a frame or two around resizes; never read past it

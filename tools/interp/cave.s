@@ -79,6 +79,8 @@ g_st_hold_hist: .fill 8,4,0     # anim holds by |rate|: <0.2 <0.3 <0.5 <1 <2 <5 
 g_hold_thr:  .float 0.2, 0.3, 0.5, 1.0, 2.0, 5.0, 20.0
 g_st_t0:     .quad 0
 g_st_t1:     .quad 0
+g_st_negholds: .long 0          # anim holds because the rate was negative
+g_st_soft_ticks: .quad 0        # QPC ticks spent in glyph_soften alone
 g_softmark:  .asciz "GOO4KSOFT"
              .byte 0, 0
 g_soften:    .long 1            # glyph_soften radius in texels (outer alpha edge only), 0 = off (shim writes from ini font_soften)
@@ -91,7 +93,8 @@ g_flags:     .long 0xffffffff   # 1 bodies, 2 clock, 4 keyframe anims, 8 camera,
 g_tick:      .long 0
 g_noclock:   .long 0
 g_anim_n:    .long 0
-g_anim_max:  .float 0.15       # ignore time jumps larger than this per tick (restarts, loop wraps)
+g_anim_max:  .float 0.5        # hold on positive jumps larger than this per tick (a loop of a backwards player)
+                               # and on any negative rate (restarts, loop wraps); measured real motion sits at 0.15-0.5
 g_body_max:  .float 200.0      # skip body lerp when it moved more than this in one tick (slot reuse)
 .p2align 4
 g_anim:      .space 32768        # ANIM_MAX x {anim ptr, last t, prev t, tick_last, tick_prev, tick_seen, continuous}
@@ -694,16 +697,22 @@ anim_found:
     movss xmm4, dword ptr [r10+8]
     subss xmm4, dword ptr [r10+12]
     divss xmm4, xmm5                    # rate per tick
+    xorps xmm5, xmm5
+    ucomiss xmm4, xmm5
+    jb    anim_hold_neg                 # backwards: loop wrap or restart, hold
     movaps xmm5, xmm4
-    andps xmm5, xmmword ptr [rip+g_absmask]
     ucomiss xmm5, dword ptr [rip+g_anim_max]
-    ja    anim_hold                     # loop wrap or reset: hold
+    ja    anim_hold                     # implausibly fast forward jump: hold
     movss xmm5, dword ptr [rip+g_one]   # interpolate: t = last - (1 - alpha) * rate
     subss xmm5, dword ptr [rip+g_alpha]
     mulss xmm4, xmm5
     subss xmm1, xmm4
     xorps xmm4, xmm4
     maxss xmm1, xmm4                    # never below zero
+anim_hold_neg:
+    inc   dword ptr [rip+g_st_negholds]
+    movaps xmm5, xmm4
+    andps xmm5, xmmword ptr [rip+g_absmask]
 anim_hold:
     inc   dword ptr [rip+g_st_animhold]
     movss dword ptr [rip+g_st_animrate], xmm5
@@ -837,17 +846,18 @@ upload_hook:
     lea   rax, [rip+_start+(C_FREE-BASE)]
     mov   [rsp+0x20], rax
     call  glyph_soften                  # widen the outer alpha edge (soften.c); needs the bitmap pad for room
+    lea   rcx, [rip+g_st_t1]
+    call  qword ptr [rip+_start+(IAT_QPC-BASE)]
+    mov   rax, [rip+g_st_t1]
+    sub   rax, [rip+g_st_t0]
+    add   [rip+g_st_soft_ticks], rax
     mov   rcx, [rsp+0x30]
 2:  call  upload_cont                   # stock upload, leaves the texture bound
     mov   ecx, 0xde1
     mov   edx, eax
     call  qword ptr [rip+_start+(GL_BINDTEX-BASE)]
-    mov   ecx, 0xde1
-    mov   edx, 0x813d                   # GL_TEXTURE_MAX_LEVEL
-    mov   r8d, 1000
-    call  qword ptr [rip+_start+(GL_TEXPARI-BASE)]
-    mov   ecx, 0xde1
-    call  qword ptr [rip+_start+(GL_GENMIP-BASE)]
+    mov   ecx, 0xde1                    # (GL_TEXTURE_MAX_LEVEL stays at its default: the stock clamp to 0 is patched out,
+    call  qword ptr [rip+_start+(GL_GENMIP-BASE)]   #  raising it after the upload made the driver reallocate the texture)
     mov   ecx, 0xde1
     mov   edx, 0x2801                   # GL_TEXTURE_MIN_FILTER
     mov   r8d, 0x2703                   # GL_LINEAR_MIPMAP_LINEAR

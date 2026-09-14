@@ -83,6 +83,9 @@ for site in (0x1400bb355,0x1400bb7a4):                 # mov edx,4 -> 7
 o=va2off(0x1400d7c77)                                  # non-4x path scale 1.0 -> 0.5
 assert d[o:o+8]==bytes.fromhex('f30f1005c16e1d00'), d[o:o+8].hex()
 struct.pack_into('<i',d,o+4,0x1402af500-(0x1400d7c77+8))
+# --- SDL2Image upload: do not clamp GL_TEXTURE_MAX_LEVEL to 0 (pname 0x813d -> 0x813c, a redundant BASE_LEVEL=0);
+#     glyph textures get mipmaps after the upload, and raising the cap afterwards forced a reallocation per glyph
+o=va2off(0x1400c65d3); assert d[o:o+5]==bytes.fromhex('ba3d810000'), d[o:o+5].hex(); d[o+1]=0x3c
 # --- sanity: stock tick rate, stock time scale ---
 assert d[va2off(0x1400ab237)]==0x32
 assert d[va2off(0x140089020):va2off(0x140089020)+8]==bytes.fromhex('48c747500000803f')
