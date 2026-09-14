@@ -74,6 +74,11 @@ g_st_nogen:  .long 0            # glGenerateMipmap pointer was null
 g_st_allupl: .long 0            # every texture upload through upload_hook (glyph or not)
 g_st_animhold: .long 0          # anim_hook rate-guard holds
 g_st_animrate: .float 0         # |rate| of the last held animation
+g_st_upl_ticks: .quad 0         # QPC ticks spent in soften + upload + mipmaps (glyphs)
+g_st_hold_hist: .fill 8,4,0     # anim holds by |rate|: <0.2 <0.3 <0.5 <1 <2 <5 <20 >=20
+g_hold_thr:  .float 0.2, 0.3, 0.5, 1.0, 2.0, 5.0, 20.0
+g_st_t0:     .quad 0
+g_st_t1:     .quad 0
 g_softmark:  .asciz "GOO4KSOFT"
              .byte 0, 0
 g_soften:    .long 1            # glyph_soften radius in texels (outer alpha edge only), 0 = off (shim writes from ini font_soften)
@@ -702,6 +707,16 @@ anim_found:
 anim_hold:
     inc   dword ptr [rip+g_st_animhold]
     movss dword ptr [rip+g_st_animrate], xmm5
+    lea   r10, [rip+g_hold_thr]
+    xor   eax, eax
+6:  cmp   eax, 7
+    jae   7f
+    ucomiss xmm5, dword ptr [r10+rax*4]
+    jb    7f
+    inc   eax
+    jmp   6b
+7:  lea   r10, [rip+g_st_hold_hist]
+    inc   dword ptr [r10+rax*4]
     jmp   anim_out
 anim_out:
     push  rbx                           # relocated prologue of ANIM_EVAL
@@ -809,6 +824,9 @@ upload_hook:
 1:
     sub   rsp, 0x38                     # entry rsp%16==8 -> aligned for calls; +0x30 image, +0x20 5th arg
     mov   [rsp+0x30], rcx
+    lea   rcx, [rip+g_st_t0]
+    call  qword ptr [rip+_start+(IAT_QPC-BASE)]
+    mov   rcx, [rsp+0x30]
     mov   r8d, dword ptr [rip+g_soften]
     test  r8d, r8d
     jz    2f
@@ -835,6 +853,11 @@ upload_hook:
     mov   r8d, 0x2703                   # GL_LINEAR_MIPMAP_LINEAR
     call  qword ptr [rip+_start+(GL_TEXPARI-BASE)]
     inc   dword ptr [rip+g_st_mip]
+    lea   rcx, [rip+g_st_t1]
+    call  qword ptr [rip+_start+(IAT_QPC-BASE)]
+    mov   rax, [rip+g_st_t1]
+    sub   rax, [rip+g_st_t0]
+    add   [rip+g_st_upl_ticks], rax
     mov   rcx, [rsp+0x30]
     mov   eax, [rcx+0x40]
     add   rsp, 0x38

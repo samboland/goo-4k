@@ -66,8 +66,20 @@ if a.textures:
         b = pathlib.Path(b); rep = json.loads((b / 'report.json').read_text())
         for e in rep['results']:
             name = e['name'][:-4]; rel = pathlib.Path(*name.split('__'))
+            # tiny images (<= 32 px: stretched squares, faders, pixels) keep the stock file: the model makes
+            # them noisy and shifts their alpha, which shows as colour splotches on dark screens (HDR).
+            # flat-colour images of any size keep the upscaled alpha but get their exact colour back.
+            src2x = stock / 'game/res' / rel.parent / (rel.name + '@2x.png'); flat = None
+            if src2x.exists():
+                import numpy as np; from PIL import Image
+                a = np.asarray(Image.open(src2x).convert('RGBA'))
+                if max(a.shape[:2]) <= 32: continue
+                if a[..., :3].reshape(-1, 3).std(axis=0).max() < 0.5: flat = a[0, 0, :3]
             dst = tex / rel.parent / (rel.name + '@4x.png'); dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(b / e['name'], dst); n += 1
+            if flat is not None:
+                bb = np.asarray(Image.open(b / e['name']).convert('RGBA')).copy(); bb[..., :3] = flat; Image.fromarray(bb).save(dst)
+            else: shutil.copy2(b / e['name'], dst)
+            n += 1
             sc = stock / 'game/res' / rel.parent / (rel.name + '@2x.png.txt')
             if sc.exists(): shutil.copy2(sc, tex / rel.parent / (rel.name + '@4x.png.txt'))
     z = root / 'dist' / f'goo4k-textures-{version}.zip'
