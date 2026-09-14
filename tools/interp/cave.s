@@ -33,6 +33,7 @@
 .set GL_TEXPARI, 0x140368458    # glTexParameteri
 .set C_MALLOC,   0x140285550    # CRT malloc (the glyph rasteriser's)
 .set C_FREE,     0x140284494    # CRT free
+.set MEASURE,    0x1400a1780    # int Font::measure(font, std::string* text): rasterises every glyph of text
 .set MARGIN_BACK, 0x1400b067f   # face setup, after the margin stores (FUN_1400b0110)
 .set BEARING_BACK, 0x1400b0ae9  # glyph rasteriser, after bitmap_left -> float (FUN_1400b0960)
 .set BASE, 0x140398000
@@ -86,6 +87,16 @@ g_st_mip_ticks: .quad 0         # QPC ticks spent in glGenerateMipmap alone
 g_softmark:  .asciz "GOO4KSOFT"
              .byte 0, 0
 g_soften:    .long 1            # glyph_soften radius in texels (outer alpha edge only), 0 = off (shim writes from ini font_soften)
+g_warmmark:  .asciz "GOO4KWARM"
+             .byte 0, 0
+g_warm:      .long 1            # rasterise + upload the printable ASCII set of the tooltip fonts during the first frames (ini font_warm)
+g_warm_font: .long 0
+g_warm_char: .long 33
+g_warm_frame: .long 0
+g_warm_names: .ascii "FONT_OUTLINE_18\0FONT_OUTLINE_26\0FONT_INGAME36\0\0\0"   # 3 x 16 bytes, std::string small buffers
+g_warm_len:  .long 15, 15, 13
+g_newglyph:  .fill 64,8,0       # glyph images created since the last drain (glyph_hook pushes, warm_step uploads)
+g_newglyph_n: .long 0
 g_padmark:   .asciz "GOO4KPAD"
              .byte 0, 0, 0
 g_glyph_pad: .long 8            # extra transparent texels around every glyph bitmap (shim writes from ini font_pad)
@@ -341,6 +352,7 @@ draw_hook:                          # rcx=renderer rdx=graphics
     sub   rsp, 0x30
     mov   r14, rcx
     mov   r15, rdx
+    call  warm_step
     # ---- alpha = clamp((now - tick) * 50 / freq, 0, 1)
     lea   rcx, [rsp+0x20]
     call  qword ptr [rip+_start+(IAT_QPC-BASE)]
@@ -807,6 +819,12 @@ glyph_hook:
     jz    glyph_out
     mov   dword ptr [rax+0x5c], GLYPH_MAGIC
     inc   dword ptr [rip+g_st_marked]
+    mov   r10d, dword ptr [rip+g_newglyph_n]
+    cmp   r10d, 64
+    jae   glyph_out
+    lea   r11, [rip+g_newglyph]
+    mov   [r11+r10*8], rax
+    inc   dword ptr [rip+g_newglyph_n]
 glyph_out:
     mov   rdx, [rbp+0x20]               # relocated
     jmp   _start+(GLYPH_BACK-BASE)
@@ -919,3 +937,76 @@ bearing_hook:
     movd  xmm0, eax
     cvtdq2ps xmm0, xmm0
     jmp   _start+(BEARING_BACK-BASE)
+
+# --- warm_step: called once per draw. Every other frame, rasterises one printable ASCII glyph of one of
+# the tooltip fonts through the engine's own measure path, then uploads every glyph image created since
+# the last drain (through the hooked upload, so it gets the pad, softening and mipmaps). All of it runs
+# during the intro movie instead of on the first hover. Fonts not loaded yet are retried next time.
+.globl warm_step
+warm_step:
+    cmp   dword ptr [rip+g_warm], 0
+    je    warm_ret
+    mov   eax, dword ptr [rip+g_warm_font]
+    cmp   eax, 3
+    jae   warm_ret
+    inc   dword ptr [rip+g_warm_frame]
+    test  dword ptr [rip+g_warm_frame], 1
+    jnz   warm_ret
+    push  rbx
+    push  rsi
+    sub   rsp, 0x68                     # +0x20 font name string (32), +0x40 one-char string (32)
+    mov   esi, eax
+    shl   esi, 4
+    lea   rax, [rip+g_warm_names]
+    mov   rcx, [rax+rsi]
+    mov   [rsp+0x20], rcx
+    mov   rcx, [rax+rsi+8]
+    mov   [rsp+0x28], rcx
+    mov   eax, dword ptr [rip+g_warm_font]
+    lea   rcx, [rip+g_warm_len]
+    mov   eax, [rcx+rax*4]
+    mov   [rsp+0x30], rax               # size
+    mov   qword ptr [rsp+0x38], 15      # capacity (small buffer)
+    call  _start+(ENV_GET-BASE)
+    mov   rcx, rax
+    mov   rax, [rax]
+    call  qword ptr [rax+0xc8]          # resource manager
+    test  rax, rax
+    jz    warm_done
+    mov   rcx, rax
+    lea   rdx, [rsp+0x20]
+    mov   rax, [rax]
+    call  qword ptr [rax+0x68]          # getFont(name)
+    test  rax, rax
+    jz    warm_done                     # not loaded yet: retry
+    mov   rbx, rax
+    mov   eax, dword ptr [rip+g_warm_char]
+    mov   [rsp+0x40], al
+    mov   byte ptr [rsp+0x41], 0
+    mov   qword ptr [rsp+0x50], 1
+    mov   qword ptr [rsp+0x58], 15
+    mov   rcx, rbx
+    lea   rdx, [rsp+0x40]
+    call  _start+(MEASURE-BASE)         # rasterises the glyph (cached per font)
+    xor   esi, esi
+1:  cmp   esi, dword ptr [rip+g_newglyph_n]
+    jae   2f
+    lea   rax, [rip+g_newglyph]
+    mov   rcx, [rax+rsi*8]
+    call  _start+(IMG_UPLOAD-BASE)      # hooked: pad already applied, soften + mipmaps here
+    inc   esi
+    jmp   1b
+2:  mov   dword ptr [rip+g_newglyph_n], 0
+    mov   eax, dword ptr [rip+g_warm_char]
+    inc   eax
+    cmp   eax, 127
+    jb    3f
+    mov   eax, 33
+    inc   dword ptr [rip+g_warm_font]
+3:  mov   dword ptr [rip+g_warm_char], eax
+warm_done:
+    add   rsp, 0x68
+    pop   rsi
+    pop   rbx
+warm_ret:
+    ret
