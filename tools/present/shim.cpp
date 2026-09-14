@@ -86,7 +86,7 @@ static ID3D11Texture2D*     g_shared = nullptr;   // GL renders into this via in
 static HANDLE g_interop = nullptr, g_sharedH = nullptr;
 static GLuint g_tex = 0, g_fbo = 0;
 static unsigned g_frames = 0;
-static bool g_overlay = true;
+static bool g_overlay = false;         // ini: overlay=1 shows the build stamp
 static double   g_cap_period = 0;      // seconds per frame when fps_cap is set
 static LARGE_INTEGER g_qpf = {}, g_last_present = {};
 
