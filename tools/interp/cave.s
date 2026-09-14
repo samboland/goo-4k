@@ -100,7 +100,8 @@ g_warmmark:  .asciz "GOO4KWARM"
              .byte 0, 0
 g_warm:      .long 1            # rasterise + upload the printable ASCII set of the tooltip fonts during the first frames (ini font_warm)
 g_warm_frame: .long 0
-g_warm_maxpt: .float 300.0     # fonts rasterised above this pointSize are not warmed (glyph textures of 1-16 MB each)
+g_warm_maxpt: .float 400.0     # fonts rasterised above this pointSize are not warmed (600 and 1040 pt: 4-16 MB per glyph)
+g_warm_every: .long 3          # warm one glyph every N frames
 g_wfont:     .fill 16,8,0       # Font objects to warm (pushed by the constructor, cleared by the destructor or when done)
 g_wchar:     .fill 16,4,0       # next character to rasterise per entry
 g_newglyph:  .fill 64,8,0       # glyph images created since the last drain (glyph_hook pushes, warm_step uploads)
@@ -955,8 +956,13 @@ bearing_hook:
 warm_step:
     cmp   dword ptr [rip+g_warm], 0
     je    warm_ret
-    inc   dword ptr [rip+g_warm_frame]
-    test  dword ptr [rip+g_warm_frame], 1
+    mov   eax, dword ptr [rip+g_warm_frame]
+    inc   eax
+    cmp   eax, dword ptr [rip+g_warm_every]
+    jb    9f
+    xor   eax, eax
+9:  mov   dword ptr [rip+g_warm_frame], eax
+    test  eax, eax
     jnz   warm_ret
     push  rbx
     push  rsi
