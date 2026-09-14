@@ -35,6 +35,7 @@
 .set C_FREE,     0x140284494    # CRT free
 .set MEASURE,    0x1400a1780    # int Font::measure(font, text*): rasterises every glyph of text (text: +8 data, +0x10 len)
 .set FONTCTOR_BACK, 0x1400a117a # Font::Font after its two home-slot stores
+.set RASTER,     0x1400b0960    # glyph rasteriser (FreeType + outline + glow -> SDL2Image); called from the layout
 .set FONTDTOR_BACK, 0x1400a13ba # Font::~Font after its two home-slot stores
 .set MARGIN_BACK, 0x1400b067f   # face setup, after the margin stores (FUN_1400b0110)
 .set BEARING_BACK, 0x1400b0ae9  # glyph rasteriser, after bitmap_left -> float (FUN_1400b0960)
@@ -86,6 +87,12 @@ g_st_tin:    .quad 0
 g_st_negholds: .long 0          # anim holds because the rate was negative
 g_st_soft_ticks: .quad 0        # QPC ticks spent in glyph_soften alone
 g_st_mip_ticks: .quad 0         # QPC ticks spent in glGenerateMipmap alone
+g_st_raster_ticks: .quad 0      # QPC ticks spent in the glyph rasteriser
+g_st_raster_n: .long 0          # rasteriser calls
+g_st_raster_max: .long 0        # largest glyph bitmap dimension seen
+g_wpt:       .fill 16,4,0       # pointSize of each queued Font (0 = free slot)
+g_rt0:       .quad 0
+g_rt1:       .quad 0
 g_softmark:  .asciz "GOO4KSOFT"
              .byte 0, 0
 g_soften:    .long 1            # glyph_soften radius in texels (outer alpha edge only), 0 = off (shim writes from ini font_soften)
@@ -972,6 +979,8 @@ warm_step:
     jmp   4b
 6:  lea   rax, [rip+g_wfont]            # too big to warm: drop
     mov   qword ptr [rax+rsi*8], 0
+    lea   rax, [rip+g_wpt]
+    mov   dword ptr [rax+rsi*4], 0
     jmp   5b
 7:  lea   rax, [rip+g_wchar]
     mov   eax, [rax+rsi*4]
@@ -1000,6 +1009,8 @@ warm_step:
     jb    8f
     lea   rax, [rip+g_wfont]            # done with this font
     mov   qword ptr [rax+rsi*8], 0
+    lea   rax, [rip+g_wpt]
+    mov   dword ptr [rax+rsi*4], 0
 8:  lea   rax, [rip+g_wchar]
     mov   [rax+rsi*4], ecx
 warm_done:
@@ -1024,6 +1035,9 @@ fontctor_hook:
     mov   [r10+rax*8], rcx
     lea   r11, [rip+g_wchar]
     mov   dword ptr [r11+rax*4], 33
+    lea   r11, [rip+g_wpt]
+    mov   r10d, [r9]                    # param_4[0] = pointSize
+    mov   [r11+rax*4], r10d
     jmp   2f
 3:  inc   eax
     jmp   1b
@@ -1042,6 +1056,43 @@ fontdtor_hook:
     cmp   [r10+rax*8], rcx
     jne   3f
     mov   qword ptr [r10+rax*8], 0
+    lea   r11, [rip+g_wpt]
+    mov   dword ptr [r11+rax*4], 0
 3:  inc   eax
     jmp   1b
 2:  jmp   _start+(FONTDTOR_BACK-BASE)
+
+# --- raster_wrap: replaces the two `call RASTER` sites in the layout (0x1400b15bc, 0x1400b08ea).
+# Times the engine's glyph rasterisation and records the largest bitmap, for the shim's slow-frame log.
+.globl raster_wrap
+raster_wrap:
+    sub   rsp, 0x48                     # entry rsp%16==8 -> aligned; args parked at +0x20..+0x38
+    mov   [rsp+0x20], rcx
+    mov   [rsp+0x28], rdx
+    mov   [rsp+0x30], r8
+    mov   [rsp+0x38], r9
+    lea   rcx, [rip+g_rt0]
+    call  qword ptr [rip+_start+(IAT_QPC-BASE)]
+    mov   rcx, [rsp+0x20]
+    mov   rdx, [rsp+0x28]
+    mov   r8, [rsp+0x30]
+    mov   r9, [rsp+0x38]
+    call  _start+(RASTER-BASE)
+    mov   [rsp+0x40], rax
+    lea   rcx, [rip+g_rt1]
+    call  qword ptr [rip+_start+(IAT_QPC-BASE)]
+    mov   rax, [rip+g_rt1]
+    sub   rax, [rip+g_rt0]
+    add   [rip+g_st_raster_ticks], rax
+    inc   dword ptr [rip+g_st_raster_n]
+    mov   rax, [rsp+0x40]
+    mov   ecx, [rax]                    # entry[0] = (h, w) packed ints
+    cmp   ecx, dword ptr [rip+g_st_raster_max]
+    jbe   1f
+    mov   dword ptr [rip+g_st_raster_max], ecx
+1:  mov   ecx, [rax+4]
+    cmp   ecx, dword ptr [rip+g_st_raster_max]
+    jbe   2f
+    mov   dword ptr [rip+g_st_raster_max], ecx
+2:  add   rsp, 0x48
+    ret

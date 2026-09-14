@@ -85,6 +85,9 @@ for site in (0x1400bb355,0x1400bb7a4):                 # mov edx,4 -> 7
 o=va2off(0x1400d7c77)                                  # non-4x path scale 1.0 -> 0.5
 assert d[o:o+8]==bytes.fromhex('f30f1005c16e1d00'), d[o:o+8].hex()
 struct.pack_into('<i',d,o+4,0x1402af500-(0x1400d7c77+8))
+for s in (0x1400b15bc,0x1400b08ea):                  # call RASTER -> raster_wrap (timing)
+    o=va2off(s); assert d[o]==0xe8 and struct.unpack_from('<i',d,o+1)[0]+s+5==0x1400b0960, hex(s)
+    struct.pack_into('<i',d,o+1,syms['raster_wrap']-(s+5))
 # --- SDL2Image upload: do not clamp GL_TEXTURE_MAX_LEVEL to 0 (pname 0x813d -> 0x813c, a redundant BASE_LEVEL=0);
 #     glyph textures get mipmaps after the upload, and raising the cap afterwards forced a reallocation per glyph
 o=va2off(0x1400c65d3); assert d[o:o+5]==bytes.fromhex('ba3d810000'), d[o:o+5].hex(); d[o+1]=0x3c
