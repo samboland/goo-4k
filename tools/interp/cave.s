@@ -824,16 +824,21 @@ upload_cont:                            # relocated prologue, then the stock fun
 #   mov [rsi+0x5c],ecx ; mov edx,[rsi+0x60] ; add edx,ecx ; mov [rsi+0x64],edx
 # ecx = max(outlineSize, glowSize). face+0x64 is the glyph bitmap margin (bitmap = glyph + 2*margin,
 # glyph placed at +margin); face+0x5c is added to bitmap_top for the vertical bearing, so growing both
-# keeps the baseline. Stock margin = max(outline, glow) + 1, so the outline stroke (radius outline)
+# keeps the baseline; face+0x60 is where the stroker's outline bitmap is composited (its bitmap already
+# spans the outline radius), so it must grow by the pad too or the ring lands up-left of the fill.
+# Stock margin = max(outline, glow) + 1, so the outline stroke (radius outline)
 # ends one texel from the bitmap edge, and the textured quad's edge cuts it: a geometric, unfiltered
 # staircase on rotated text. With the pad the outline boundary is interior and filtered like the fill.
 .globl margin_hook
 margin_hook:
-    add   ecx, dword ptr [rip+g_glyph_pad]
-    mov   [rsi+0x5c], ecx
+    mov   eax, dword ptr [rip+g_glyph_pad]
     mov   edx, [rsi+0x60]
-    add   edx, ecx
+    add   edx, eax                      # face+0x60: stroke bitmap offset = margin - outline (stock: the 0/1 flag)
+    mov   [rsi+0x60], edx
+    add   edx, ecx                      # margin = max(outline, glow) + flag + pad (edx stays live: ascent math)
     mov   [rsi+0x64], edx
+    add   ecx, eax
+    mov   [rsi+0x5c], ecx               # vertical bearing compensation = max(outline, glow) + pad
     jmp   _start+(MARGIN_BACK-BASE)
 
 # --- bearing_hook: detour at 0x1400b0ade in the rasteriser. Relocated: movd xmm0,[rbx+0x90] ; cvtdq2ps.
