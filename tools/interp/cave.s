@@ -90,6 +90,7 @@ g_st_mip_ticks: .quad 0         # QPC ticks spent in glGenerateMipmap alone
 g_st_raster_ticks: .quad 0      # QPC ticks spent in the glyph rasteriser
 g_st_raster_n: .long 0          # rasteriser calls
 g_st_raster_max: .long 0        # largest glyph bitmap dimension seen
+g_st_upl_last: .long 0          # texture size of the last glyph uploaded
 g_wpt:       .fill 16,4,0       # pointSize of each queued Font (0 = free slot)
 g_rt0:       .quad 0
 g_rt1:       .quad 0
@@ -100,7 +101,9 @@ g_warmmark:  .asciz "GOO4KWARM"
              .byte 0, 0
 g_warm:      .long 1            # rasterise + upload the printable ASCII set of the tooltip fonts during the first frames (ini font_warm)
 g_warm_frame: .long 0
-g_warm_maxpt: .float 400.0     # fonts rasterised above this pointSize are not warmed (600 and 1040 pt: 4-16 MB per glyph)
+g_warm_maxpt: .float 700.0     # fonts above this pointSize are not warmed (1040 pt: 16 MB per glyph)
+g_warm_bigpt: .float 400.0     # above this, only letters, digits and basic punctuation (4-5 MB per glyph)
+g_warm_allowed: .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,1,0,0,0,0,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0
 g_warm_every: .long 3          # warm one glyph every N frames
 g_wfont:     .fill 16,8,0       # Font objects to warm (pushed by the constructor, cleared by the destructor or when done)
 g_wchar:     .fill 16,4,0       # next character to rasterise per entry
@@ -855,6 +858,8 @@ upload_hook:
     cmp   qword ptr [rcx+0x60], 0       # no pixels
     je    upload_cont
     inc   dword ptr [rip+g_st_upl]
+    mov   eax, [rcx+0x4c]
+    mov   dword ptr [rip+g_st_upl_last], eax
     cmp   qword ptr [rip+_start+(GL_GENMIP-BASE)], 0
     jne   1f
     inc   dword ptr [rip+g_st_nogen]
@@ -990,6 +995,23 @@ warm_step:
     jmp   5b
 7:  lea   rax, [rip+g_wchar]
     mov   eax, [rax+rsi*4]
+    movss xmm0, dword ptr [rbx+0x38]
+    comiss xmm0, dword ptr [rip+g_warm_bigpt]
+    jbe   10f
+    lea   rcx, [rip+g_warm_allowed]     # big font: skip characters outside the reduced set
+11: cmp   eax, 127
+    jae   12f
+    cmp   byte ptr [rcx+rax], 0
+    jne   10f
+    inc   eax
+    jmp   11b
+12: lea   rax, [rip+g_wfont]            # nothing left for this font
+    mov   qword ptr [rax+rsi*8], 0
+    lea   rax, [rip+g_wpt]
+    mov   dword ptr [rax+rsi*4], 0
+    jmp   warm_done
+10: lea   rcx, [rip+g_wchar]
+    mov   [rcx+rsi*4], eax
     mov   [rsp+0x58], al
     mov   byte ptr [rsp+0x59], 0
     mov   qword ptr [rsp+0x40], 0
