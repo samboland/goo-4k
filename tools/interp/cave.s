@@ -980,6 +980,10 @@ warm_step:
     test  rax, rax
     jz    warm_done                     # not loaded yet: retry
     mov   rbx, rax
+    cmp   qword ptr [rbx+0x78], 0       # FreeType faces are created when the resource group loads
+    je    warm_done
+    cmp   qword ptr [rbx+0x80], 0
+    je    warm_done
     mov   eax, dword ptr [rip+g_warm_char]
     mov   [rsp+0x40], al
     mov   byte ptr [rsp+0x41], 0
