@@ -79,6 +79,7 @@ g_st_hold_hist: .fill 8,4,0     # anim holds by |rate|: <0.2 <0.3 <0.5 <1 <2 <5 
 g_hold_thr:  .float 0.2, 0.3, 0.5, 1.0, 2.0, 5.0, 20.0
 g_st_t0:     .quad 0
 g_st_t1:     .quad 0
+g_st_tin:    .quad 0
 g_st_negholds: .long 0          # anim holds because the rate was negative
 g_st_soft_ticks: .quad 0        # QPC ticks spent in glyph_soften alone
 g_st_mip_ticks: .quad 0         # QPC ticks spent in glGenerateMipmap alone
@@ -709,6 +710,7 @@ anim_found:
     subss xmm1, xmm4
     xorps xmm4, xmm4
     maxss xmm1, xmm4                    # never below zero
+    jmp   anim_out
 anim_hold_chk:
     ucomiss xmm4, dword ptr [rip+g_zero]
     jae   anim_hold
@@ -835,6 +837,8 @@ upload_hook:
     mov   [rsp+0x30], rcx
     lea   rcx, [rip+g_st_t0]
     call  qword ptr [rip+_start+(IAT_QPC-BASE)]
+    mov   rax, [rip+g_st_t0]
+    mov   [rip+g_st_tin], rax
     mov   rcx, [rsp+0x30]
     mov   r8d, dword ptr [rip+g_soften]
     test  r8d, r8d
@@ -873,7 +877,7 @@ upload_hook:
     lea   rcx, [rip+g_st_t1]
     call  qword ptr [rip+_start+(IAT_QPC-BASE)]
     mov   rax, [rip+g_st_t1]
-    sub   rax, [rip+g_st_t0]
+    sub   rax, [rip+g_st_tin]
     add   [rip+g_st_upl_ticks], rax
     mov   rcx, [rsp+0x30]
     mov   eax, [rcx+0x40]
