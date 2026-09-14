@@ -89,7 +89,7 @@ static LARGE_INTEGER g_qpf = {}, g_last_present = {};
 static int g_interp_flags = -1;       // ini: interp=<mask>; -1 leaves the exe default (all on)
 static bool g_debug_keys = false;     // ini: debug=1 enables F5
 static int g_font_pad = 8;            // ini: font_pad, extra transparent texels around glyph bitmaps (0 = stock)
-static int g_font_soften = 2;         // ini: font_soften, outer-edge alpha ramp radius in texels (0 = off)
+static int g_font_soften = 1;         // ini: font_soften, outer-edge alpha ramp radius in texels (0 = off)
 static void apply_flags();
 
 // goopresent.ini next to the config: fps_cap=<n> (0 = off). Env GOO_FPS_CAP overrides.

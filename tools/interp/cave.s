@@ -73,7 +73,7 @@ g_st_mip:    .long 0            # mipmaps generated
 g_st_nogen:  .long 0            # glGenerateMipmap pointer was null
 g_softmark:  .asciz "GOO4KSOFT"
              .byte 0, 0
-g_soften:    .long 2            # glyph_soften radius in texels (outer alpha edge only), 0 = off (shim writes from ini font_soften)
+g_soften:    .long 1            # glyph_soften radius in texels (outer alpha edge only), 0 = off (shim writes from ini font_soften)
 g_padmark:   .asciz "GOO4KPAD"
              .byte 0, 0, 0
 g_glyph_pad: .long 8            # extra transparent texels around every glyph bitmap (shim writes from ini font_pad)

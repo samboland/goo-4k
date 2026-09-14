@@ -117,7 +117,7 @@ Appended: the `.goo` section (about 11 KB) from `cave.s`:
   subtracts it from `bitmap_left` so glyph ink stays put. Bitmaps grow by 2 x pad per axis.
 - `glyph_soften` (soften.c, C compiled freestanding into the section): before a glyph's upload,
   widens the bitmap's outer alpha edge by a box blur of `font_soften` texels (`GOO4KSOFT` marker
-  +12, default 2) and extends the edge colour into the newly covered texels; RGB inside the opaque
+  +12, default 1) and extends the edge colour into the newly covered texels; RGB inside the opaque
   area is untouched, so the fill/outline boundary stays as FreeType drew it. Needs the pad above
   for room. Without it the outline's outer ramp is one texel (0.3 px at 4K) and straight stems on
   rotated text still show the one-pixel staircase of the mipmap filter alone.
