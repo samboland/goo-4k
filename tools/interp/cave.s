@@ -954,7 +954,7 @@ warm_step:
     jnz   warm_ret
     push  rbx
     push  rsi
-    sub   rsp, 0x68                     # +0x20 font name string (32), +0x40 one-char string (32)
+    sub   rsp, 0x68                     # +0x20 font name std::string (32), +0x40 text object (24) +0x58 its bytes
     mov   esi, eax
     shl   esi, 4
     lea   rax, [rip+g_warm_names]
@@ -985,10 +985,12 @@ warm_step:
     cmp   qword ptr [rbx+0x80], 0
     je    warm_done
     mov   eax, dword ptr [rip+g_warm_char]
-    mov   [rsp+0x40], al
-    mov   byte ptr [rsp+0x41], 0
+    mov   [rsp+0x58], al                # text object: +8 char* data, +0x10 int length (Boy string, not std::string)
+    mov   byte ptr [rsp+0x59], 0
+    mov   qword ptr [rsp+0x40], 0
+    lea   rax, [rsp+0x58]
+    mov   [rsp+0x48], rax
     mov   qword ptr [rsp+0x50], 1
-    mov   qword ptr [rsp+0x58], 15
     mov   rcx, rbx
     lea   rdx, [rsp+0x40]
     call  _start+(MEASURE-BASE)         # rasterises the glyph (cached per font)
