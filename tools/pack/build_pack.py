@@ -4,6 +4,7 @@
 Output: dist/goo4k-<version>/ (installer) and dist/goo4k-textures-<version>.zip (if --textures given)
 """
 import argparse, subprocess, pathlib, shutil, struct, sys, json, datetime, zipfile
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1])); import alpha_mask as am
 root = pathlib.Path(__file__).resolve().parents[2]
 p = argparse.ArgumentParser()
 p.add_argument('--stock', default=r'C:\Program Files (x86)\Steam\steamapps\common\World of Goo')
@@ -79,6 +80,7 @@ if a.textures:
             if flat is not None:
                 bb = np.asarray(Image.open(b / e['name']).convert('RGBA')).copy(); bb[..., :3] = flat; Image.fromarray(bb).save(dst)
             else: shutil.copy2(b / e['name'], dst)
+            if src2x.exists(): am.process(src2x, dst, dst)   # clamp the model's alpha haze to the stock silhouette
             n += 1
             sc = stock / 'game/res' / rel.parent / (rel.name + '@2x.png.txt')
             if sc.exists(): shutil.copy2(sc, tex / rel.parent / (rel.name + '@4x.png.txt'))
