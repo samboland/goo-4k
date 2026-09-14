@@ -33,7 +33,9 @@
 .set GL_TEXPARI, 0x140368458    # glTexParameteri
 .set C_MALLOC,   0x140285550    # CRT malloc (the glyph rasteriser's)
 .set C_FREE,     0x140284494    # CRT free
-.set MEASURE,    0x1400a1780    # int Font::measure(font, std::string* text): rasterises every glyph of text
+.set MEASURE,    0x1400a1780    # int Font::measure(font, text*): rasterises every glyph of text (text: +8 data, +0x10 len)
+.set FONTCTOR_BACK, 0x1400a117a # Font::Font after its two home-slot stores
+.set FONTDTOR_BACK, 0x1400a13ba # Font::~Font after its two home-slot stores
 .set MARGIN_BACK, 0x1400b067f   # face setup, after the margin stores (FUN_1400b0110)
 .set BEARING_BACK, 0x1400b0ae9  # glyph rasteriser, after bitmap_left -> float (FUN_1400b0960)
 .set BASE, 0x140398000
@@ -90,11 +92,10 @@ g_soften:    .long 1            # glyph_soften radius in texels (outer alpha edg
 g_warmmark:  .asciz "GOO4KWARM"
              .byte 0, 0
 g_warm:      .long 1            # rasterise + upload the printable ASCII set of the tooltip fonts during the first frames (ini font_warm)
-g_warm_font: .long 0
-g_warm_char: .long 33
 g_warm_frame: .long 0
-g_warm_names: .ascii "FONT_OUTLINE_18\0FONT_OUTLINE_26\0FONT_INGAME36\0\0\0"   # 3 x 16 bytes, std::string small buffers
-g_warm_len:  .long 15, 15, 13
+g_warm_maxpt: .float 300.0     # fonts rasterised above this pointSize are not warmed (glyph textures of 1-16 MB each)
+g_wfont:     .fill 16,8,0       # Font objects to warm (pushed by the constructor, cleared by the destructor or when done)
+g_wchar:     .fill 16,4,0       # next character to rasterise per entry
 g_newglyph:  .fill 64,8,0       # glyph images created since the last drain (glyph_hook pushes, warm_step uploads)
 g_newglyph_n: .long 0
 g_padmark:   .asciz "GOO4KPAD"
@@ -938,54 +939,43 @@ bearing_hook:
     cvtdq2ps xmm0, xmm0
     jmp   _start+(BEARING_BACK-BASE)
 
-# --- warm_step: called once per draw. Every other frame, rasterises one printable ASCII glyph of one of
-# the tooltip fonts through the engine's own measure path, then uploads every glyph image created since
-# the last drain (through the hooked upload, so it gets the pad, softening and mipmaps). All of it runs
-# during the intro movie instead of on the first hover. Fonts not loaded yet are retried next time.
+# --- warm_step: called once per draw. Every other frame, rasterises one printable ASCII glyph of one
+# Font object waiting in g_wfont through the engine's own measure path, then uploads every glyph image
+# created since the last drain (through the hooked upload, so it gets the pad, softening and mipmaps).
+# Fonts are queued by their constructor and removed by their destructor, so a Font recreated by a
+# resource group reload is warmed again; fonts whose FreeType faces are not created yet wait.
 .globl warm_step
 warm_step:
     cmp   dword ptr [rip+g_warm], 0
     je    warm_ret
-    mov   eax, dword ptr [rip+g_warm_font]
-    cmp   eax, 3
-    jae   warm_ret
     inc   dword ptr [rip+g_warm_frame]
     test  dword ptr [rip+g_warm_frame], 1
     jnz   warm_ret
     push  rbx
     push  rsi
-    sub   rsp, 0x68                     # +0x20 font name std::string (32), +0x40 text object (24) +0x58 its bytes
-    mov   esi, eax
-    shl   esi, 4
-    lea   rax, [rip+g_warm_names]
-    mov   rcx, [rax+rsi]
-    mov   [rsp+0x20], rcx
-    mov   rcx, [rax+rsi+8]
-    mov   [rsp+0x28], rcx
-    mov   eax, dword ptr [rip+g_warm_font]
-    lea   rcx, [rip+g_warm_len]
-    mov   eax, [rcx+rax*4]
-    mov   [rsp+0x30], rax               # size
-    mov   qword ptr [rsp+0x38], 15      # capacity (small buffer)
-    call  _start+(ENV_GET-BASE)
-    mov   rcx, rax
-    mov   rax, [rax]
-    call  qword ptr [rax+0xc8]          # resource manager
-    test  rax, rax
-    jz    warm_done
-    mov   rcx, rax
-    lea   rdx, [rsp+0x20]
-    mov   rax, [rax]
-    call  qword ptr [rax+0x68]          # getFont(name)
-    test  rax, rax
-    jz    warm_done                     # not loaded yet: retry
-    mov   rbx, rax
-    cmp   qword ptr [rbx+0x78], 0       # FreeType faces are created when the resource group loads
-    je    warm_done
+    sub   rsp, 0x68                     # +0x40 text object (24), +0x58 its bytes
+    xor   esi, esi
+4:  cmp   esi, 16
+    jae   warm_done
+    lea   rax, [rip+g_wfont]
+    mov   rbx, [rax+rsi*8]
+    test  rbx, rbx
+    jz    5f
+    movss xmm0, dword ptr [rbx+0x38]    # pointSize
+    comiss xmm0, dword ptr [rip+g_warm_maxpt]
+    ja    6f
+    cmp   qword ptr [rbx+0x78], 0       # FreeType faces exist once the resource group is loaded
+    je    5f
     cmp   qword ptr [rbx+0x80], 0
-    je    warm_done
-    mov   eax, dword ptr [rip+g_warm_char]
-    mov   [rsp+0x58], al                # text object: +8 char* data, +0x10 int length (Boy string, not std::string)
+    jne   7f
+5:  inc   esi
+    jmp   4b
+6:  lea   rax, [rip+g_wfont]            # too big to warm: drop
+    mov   qword ptr [rax+rsi*8], 0
+    jmp   5b
+7:  lea   rax, [rip+g_wchar]
+    mov   eax, [rax+rsi*4]
+    mov   [rsp+0x58], al
     mov   byte ptr [rsp+0x59], 0
     mov   qword ptr [rsp+0x40], 0
     lea   rax, [rsp+0x58]
@@ -994,25 +984,64 @@ warm_step:
     mov   rcx, rbx
     lea   rdx, [rsp+0x40]
     call  _start+(MEASURE-BASE)         # rasterises the glyph (cached per font)
-    xor   esi, esi
-1:  cmp   esi, dword ptr [rip+g_newglyph_n]
+    xor   ebx, ebx
+1:  cmp   ebx, dword ptr [rip+g_newglyph_n]
     jae   2f
     lea   rax, [rip+g_newglyph]
-    mov   rcx, [rax+rsi*8]
+    mov   rcx, [rax+rbx*8]
     call  _start+(IMG_UPLOAD-BASE)      # hooked: pad already applied, soften + mipmaps here
-    inc   esi
+    inc   ebx
     jmp   1b
 2:  mov   dword ptr [rip+g_newglyph_n], 0
-    mov   eax, dword ptr [rip+g_warm_char]
-    inc   eax
-    cmp   eax, 127
-    jb    3f
-    mov   eax, 33
-    inc   dword ptr [rip+g_warm_font]
-3:  mov   dword ptr [rip+g_warm_char], eax
+    lea   rax, [rip+g_wchar]
+    mov   ecx, [rax+rsi*4]
+    inc   ecx
+    cmp   ecx, 127
+    jb    8f
+    lea   rax, [rip+g_wfont]            # done with this font
+    mov   qword ptr [rax+rsi*8], 0
+8:  lea   rax, [rip+g_wchar]
+    mov   [rax+rsi*4], ecx
 warm_done:
     add   rsp, 0x68
     pop   rsi
     pop   rbx
 warm_ret:
     ret
+
+# --- fontctor_hook: detour at Font::Font (0x1400a1170). Relocated: mov [rsp+0x10],rbx ; mov [rsp+8],rcx.
+# rcx = the new Font: queue it for warming.
+.globl fontctor_hook
+fontctor_hook:
+    mov   [rsp+0x10], rbx
+    mov   [rsp+8], rcx
+    lea   r10, [rip+g_wfont]
+    xor   eax, eax
+1:  cmp   eax, 16
+    jae   2f
+    cmp   qword ptr [r10+rax*8], 0
+    jne   3f
+    mov   [r10+rax*8], rcx
+    lea   r11, [rip+g_wchar]
+    mov   dword ptr [r11+rax*4], 33
+    jmp   2f
+3:  inc   eax
+    jmp   1b
+2:  jmp   _start+(FONTCTOR_BACK-BASE)
+
+# --- fontdtor_hook: detour at Font::~Font (0x1400a13b0). Relocated: mov [rsp+8],rbx ; mov [rsp+0x10],rsi.
+# rcx = the dying Font: forget it.
+.globl fontdtor_hook
+fontdtor_hook:
+    mov   [rsp+8], rbx
+    mov   [rsp+0x10], rsi
+    lea   r10, [rip+g_wfont]
+    xor   eax, eax
+1:  cmp   eax, 16
+    jae   2f
+    cmp   [r10+rax*8], rcx
+    jne   3f
+    mov   qword ptr [r10+rax*8], 0
+3:  inc   eax
+    jmp   1b
+2:  jmp   _start+(FONTDTOR_BACK-BASE)

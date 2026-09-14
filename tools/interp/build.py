@@ -68,6 +68,8 @@ jmp_patch(0x1400b109d,'488945b0488b5520',syms['glyph_hook'])          # after gl
 jmp_patch(0x1400c6520,'48895c240848896c2410',syms['upload_hook'])   # SDL2Image upload prologue, relocated in cave
 jmp_patch(0x1400b0674,'894e5c8b566003d1895664',syms['margin_hook'])  # face setup: glyph bitmap margin, relocated in cave
 jmp_patch(0x1400b0ade,'660f6e83900000000f5bc0',syms['bearing_hook']) # rasteriser: bitmap_left -> float, relocated in cave
+jmp_patch(0x1400a1170,'48895c241048894c2408',syms['fontctor_hook'])  # Font::Font prologue, relocated in cave
+jmp_patch(0x1400a13b0,'48895c24084889742410',syms['fontdtor_hook'])  # Font::~Font prologue, relocated in cave
 # --- two-suffix loader: try "@4x.png" (scale 0.25), fall back to "@2x.png" (scale 0.5) ---
 o=va2off(0x1402b8370); assert d[o:o+8]==b'@2x.png'+bytes(1), bytes(d[o:o+8]); d[o:o+8]=b'@4x.png'+bytes(1)
 sfx2=syms['g_sfx2x']                                  # "@2x.png" in the .goo section
