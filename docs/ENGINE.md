@@ -74,6 +74,9 @@ In place, 123 bytes:
 | 0x1400c6520 | `SDL2Image` upload entry -> `jmp upload_hook` (10-byte prologue relocated) |
 | 0x1400b0674 | face setup: glyph bitmap margin stores -> `jmp margin_hook` (11 bytes relocated) |
 | 0x1400b0ade | glyph rasteriser: `bitmap_left` read -> `jmp bearing_hook` (11 bytes relocated) |
+| 0x1400a1170, 0x1400a13b0 | `Font::Font`, `Font::~Font` prologues -> `fontctor_hook`, `fontdtor_hook` (10 bytes relocated) |
+| 0x1400b15bc, 0x1400b08ea | `call` glyph rasteriser -> `raster_wrap` (timing) |
+| 0x1400c65d3+1 | `SDL2Image` upload: `GL_TEXTURE_MAX_LEVEL` clamp turned into a redundant `GL_TEXTURE_BASE_LEVEL` store (0x813d -> 0x813c) |
 
 Appended: the `.goo` section (about 11 KB) from `cave.s`:
 
@@ -121,6 +124,14 @@ Appended: the `.goo` section (about 11 KB) from `cave.s`:
   area is untouched, so the fill/outline boundary stays as FreeType drew it. Needs the pad above
   for room. Without it the outline's outer ramp is one texel (0.3 px at 4K) and straight stems on
   rotated text still show the one-pixel staircase of the mipmap filter alone.
+- `warm_step` (from `draw_hook`), `fontctor_hook`, `fontdtor_hook`, `raster_wrap`: every `Font`
+  created (`Font::Font` 0x1400a1170) is queued; every third frame one printable ASCII character of a
+  queued font is rasterised through the engine's own `Font::measure` (0x1400a1780, text object with
+  data pointer at +8 and length at +0x10) and the new glyph images are uploaded at once. Fonts above
+  400 pt get letters, digits and basic punctuation only; above 700 pt none. A dying `Font`
+  (0x1400a13b0) leaves the queue. Measured cost of a cold hover before this: 42 ms rasterising 16
+  glyphs, 27 ms uploading them, at 4x. `raster_wrap` replaces the two calls to the rasteriser from
+  the layout (0x1400b15bc, 0x1400b08ea) to time it for the debug log.
 - Data markers read or written by the shim: `GOO4K:` build stamp, `GOO4KFLAGS` (+12: feature
   mask), `GOO4KDEBUG` (+12: command/status word).
 
