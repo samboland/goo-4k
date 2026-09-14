@@ -133,6 +133,10 @@ Appended: the `.goo` section (about 11 KB) from `cave.s`:
   (0x1400a13b0) leaves the queue. Measured cost of a cold hover before this: 42 ms rasterising 16
   glyphs, 27 ms uploading them, at 4x. `raster_wrap` replaces the two calls to the rasteriser from
   the layout (0x1400b15bc, 0x1400b08ea) to time it for the debug log.
+- Art mipmaps (flag 128): every texture upload gets `glGenerateMipmap` and `GL_LINEAR_MIPMAP_LINEAR`.
+  The 4x art is drawn at about 0.6 texels per pixel, so plain bilinear sampling skipped texels and
+  every edge aliased slightly. The pack bleeds edge colours into transparent texels
+  (`alpha_mask.bleed_rgb`) so the averaging does not produce fringes.
 - Data markers read or written by the shim: `GOO4K:` build stamp, `GOO4KFLAGS` (+12: feature
   mask), `GOO4KDEBUG` (+12: command/status word).
 
