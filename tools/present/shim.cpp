@@ -37,6 +37,9 @@ typedef int  (*PFN_GetSwapInterval)(void);
 static PFN_SwapWindow      real_SwapWindow = nullptr;
 static PFN_SetSwapInterval real_SetSwapInterval = nullptr;
 static PFN_GetSwapInterval real_GetSwapInterval = nullptr;
+typedef void (*PFN_GetDrawableSize)(SDL_Window*, int*, int*);
+static PFN_GetDrawableSize real_GetDrawableSize = nullptr;
+static SDL_Window* g_win = nullptr;
 static HMODULE g_real = nullptr;
 
 static void load_real() {
@@ -46,6 +49,7 @@ static void load_real() {
     real_SwapWindow = (PFN_SwapWindow)GetProcAddress(g_real, "SDL_GL_SwapWindow");
     real_SetSwapInterval = (PFN_SetSwapInterval)GetProcAddress(g_real, "SDL_GL_SetSwapInterval");
     real_GetSwapInterval = (PFN_GetSwapInterval)GetProcAddress(g_real, "SDL_GL_GetSwapInterval");
+    real_GetDrawableSize = (PFN_GetDrawableSize)GetProcAddress(g_real, "SDL_GL_GetDrawableSize");
 }
 
 // ---- GL / WGL function pointers (resolved with the game's context current)
@@ -88,6 +92,7 @@ static LARGE_INTEGER g_qpf = {}, g_last_present = {};
 
 static int g_interp_flags = -1;       // ini: interp=<mask>; -1 leaves the exe default (all on)
 static bool g_debug_keys = false;     // ini: debug=1 enables F5
+static int g_dump_frames = 0;         // ini: dump_frames=N saves the first N presented frames as BMP next to the log
 static int g_font_pad = 8;            // ini: font_pad, extra transparent texels around glyph bitmaps (0 = stock)
 static int g_font_soften = 1;         // ini: font_soften, outer-edge alpha ramp radius in texels (0 = off)
 static void apply_flags();
@@ -98,7 +103,7 @@ static void read_settings() {
     char path[MAX_PATH]; DWORD n = GetEnvironmentVariableA("LOCALAPPDATA", path, MAX_PATH);
     if (n && n < MAX_PATH) {
         strcat_s(path, "\\2DBoy\\WorldOfGoo\\goopresent.ini");
-        if (FILE* f = fopen(path, "r")) { char line[256]; while (fgets(line, sizeof line, f)) { double v; int o; if (sscanf(line, " fps_cap = %lf", &v) == 1 || sscanf(line, " fps_cap=%lf", &v) == 1) cap = v; if (sscanf(line, " overlay = %d", &o) == 1 || sscanf(line, " overlay=%d", &o) == 1) g_overlay = o != 0; if (sscanf(line, " interp = %d", &o) == 1 || sscanf(line, " interp=%d", &o) == 1) g_interp_flags = o; if (sscanf(line, " debug = %d", &o) == 1 || sscanf(line, " debug=%d", &o) == 1) g_debug_keys = o != 0; if (sscanf(line, " font_pad = %d", &o) == 1 || sscanf(line, " font_pad=%d", &o) == 1) g_font_pad = o; if (sscanf(line, " font_soften = %d", &o) == 1 || sscanf(line, " font_soften=%d", &o) == 1) g_font_soften = o; } fclose(f); }
+        if (FILE* f = fopen(path, "r")) { char line[256]; while (fgets(line, sizeof line, f)) { double v; int o; if (sscanf(line, " fps_cap = %lf", &v) == 1 || sscanf(line, " fps_cap=%lf", &v) == 1) cap = v; if (sscanf(line, " overlay = %d", &o) == 1 || sscanf(line, " overlay=%d", &o) == 1) g_overlay = o != 0; if (sscanf(line, " interp = %d", &o) == 1 || sscanf(line, " interp=%d", &o) == 1) g_interp_flags = o; if (sscanf(line, " debug = %d", &o) == 1 || sscanf(line, " debug=%d", &o) == 1) g_debug_keys = o != 0; if (sscanf(line, " dump_frames = %d", &o) == 1 || sscanf(line, " dump_frames=%d", &o) == 1) g_dump_frames = o; if (sscanf(line, " font_pad = %d", &o) == 1 || sscanf(line, " font_pad=%d", &o) == 1) g_font_pad = o; if (sscanf(line, " font_soften = %d", &o) == 1 || sscanf(line, " font_soften=%d", &o) == 1) g_font_soften = o; } fclose(f); }
     }
     if (const char* e = getenv("GOO_FPS_CAP")) cap = atof(e);
     g_cap_period = cap > 0 ? 1.0 / cap : 0;
@@ -144,17 +149,18 @@ static BYTE* find_goo_marker(const char* marker) {
     return nullptr;
 }
 static DWORD* g_debug_word = nullptr;
+static DWORD* g_stats = nullptr;      // GOO4KSTATS counters in the exe (see cave.s)
 static bool g_f5_down = false;
 static void poll_debug_keys() {
     if (!g_debug_keys) return;
     if (!g_debug_word) { BYTE* m = find_goo_marker("GOO4KDEBUG"); if (!m) return; g_debug_word = (DWORD*)(m + 12); }
+    if (!g_stats) { BYTE* m = find_goo_marker("GOO4KSTATS"); if (m) g_stats = (DWORD*)(m + 12); }
     if (*g_debug_word >= 2) { logf("debug burst result %lu (2 no camera, 3 create failed, 4 created only, 5 added to scene)", *g_debug_word); *g_debug_word = 0; }
     bool down = (GetAsyncKeyState(VK_F5) & 0x8000) != 0;
     if (down && !g_f5_down) { *g_debug_word = 1; logf("F5: debug burst"); }
     g_f5_down = down;
-    static DWORD* stats = nullptr; static DWORD last[4] = {0, 0, 0, 0}; static unsigned n = 0;
-    if (!stats) { BYTE* m = find_goo_marker("GOO4KSTATS"); if (m) stats = (DWORD*)(m + 12); }
-    if (stats && (++n % 120) == 0 && memcmp(stats, last, sizeof last) != 0) { memcpy(last, stats, sizeof last); logf("font stats: marked=%lu uploads=%lu mipmapped=%lu genmip_null=%lu", stats[0], stats[1], stats[2], stats[3]); }
+    static DWORD last[7] = {0}; static unsigned n = 0;
+    if (g_stats && (++n % 120) == 0 && memcmp(g_stats, last, sizeof last) != 0) { memcpy(last, g_stats, sizeof last); logf("font stats: marked=%lu uploads=%lu mipmapped=%lu genmip_null=%lu all_uploads=%lu anim_holds=%lu last_hold_rate=%.4f", g_stats[0], g_stats[1], g_stats[2], g_stats[3], g_stats[4], g_stats[5], *(float*)&g_stats[6]); }
 }
 static void apply_flags() {
     BYTE* m = find_goo_marker("GOO4KFLAGS");
@@ -302,11 +308,57 @@ static bool init_present() {
     return true;
 }
 
+// save the frame about to be presented as a 32-bit BMP next to the log (ini dump_frames=N)
+static void dump_frame(unsigned idx) {
+    ID3D11Texture2D* bb = nullptr; if (FAILED(g_sc->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&bb))) return;
+    D3D11_TEXTURE2D_DESC td; bb->GetDesc(&td); td.Usage = D3D11_USAGE_STAGING; td.BindFlags = 0; td.CPUAccessFlags = D3D11_CPU_ACCESS_READ; td.MiscFlags = 0;
+    ID3D11Texture2D* st = nullptr;
+    if (SUCCEEDED(g_dev->CreateTexture2D(&td, nullptr, &st))) {
+        g_ctx->CopyResource(st, bb);
+        D3D11_MAPPED_SUBRESOURCE mp;
+        if (SUCCEEDED(g_ctx->Map(st, 0, D3D11_MAP_READ, 0, &mp))) {
+            char path[MAX_PATH]; snprintf(path, sizeof path, "%s\\2DBoy\\WorldOfGoo\\frame%03u.bmp", getenv("LOCALAPPDATA") ? getenv("LOCALAPPDATA") : ".", idx);
+            if (FILE* f = fopen(path, "wb")) {
+                unsigned w = td.Width, h = td.Height, rowbytes = w * 4, size = rowbytes * h;
+                unsigned char hdr[54] = {'B','M'}; auto put32 = [&](int off, unsigned v) { hdr[off] = v; hdr[off+1] = v >> 8; hdr[off+2] = v >> 16; hdr[off+3] = v >> 24; };
+                put32(2, 54 + size); put32(10, 54); put32(14, 40); put32(18, w); put32(22, h); hdr[26] = 1; hdr[28] = 32; put32(34, size);
+                fwrite(hdr, 1, 54, f);
+                for (int y = (int)h - 1; y >= 0; y--) fwrite((const char*)mp.pData + (size_t)y * mp.RowPitch, 1, rowbytes, f);
+                fclose(f);
+            }
+            g_ctx->Unmap(st, 0);
+        }
+        st->Release();
+    }
+    bb->Release();
+}
+
 static void present_frame() {
     RECT rc; GetClientRect(g_hwnd, &rc);
     int w = rc.right - rc.left, h = rc.bottom - rc.top;
     if (w <= 0 || h <= 0) return;                       // minimized
     if (w != g_w || h != g_h) { if (!resize(w, h)) { g_disabled = true; return; } logf("resized %dx%d", w, h); }
+
+    // frame timing: log slow frames with what the exe did in them (debug only)
+    static LARGE_INTEGER t0 = {}, tprev = {}, tfreq = {}; LARGE_INTEGER tnow; QueryPerformanceCounter(&tnow);
+    if (!tfreq.QuadPart) { QueryPerformanceFrequency(&tfreq); t0 = tprev = tnow; }
+    static DWORD sprev[7] = {0};
+    if (g_debug_keys && g_frames > 10) {
+        double ms = (tnow.QuadPart - tprev.QuadPart) * 1000.0 / tfreq.QuadPart;
+        if (ms > 25.0) {
+            DWORD d[7] = {0}; if (g_stats) for (int i = 0; i < 6; i++) d[i] = g_stats[i] - sprev[i];
+            logf("slow frame %.1f ms at %.1f s: glyph_uploads+%lu all_uploads+%lu anim_holds+%lu", ms, (tnow.QuadPart - t0.QuadPart) / (double)tfreq.QuadPart, d[1], d[4], d[5]);
+        }
+    }
+    if (g_stats) memcpy(sprev, g_stats, sizeof sprev);
+    tprev = tnow;
+
+    // the GL drawable can lag the client rect for a frame or two around resizes; never read past it
+    int dw = w, dh = h;
+    if (real_GetDrawableSize && g_win) real_GetDrawableSize(g_win, &dw, &dh);
+    static int lastdw = 0, lastdh = 0;
+    if ((dw != w || dh != h) && (dw != lastdw || dh != lastdh)) { logf("drawable %dx%d vs client %dx%d", dw, dh, w, h); lastdw = dw; lastdh = dh; }
+    int bw = dw < w ? dw : w, bh = dh < h ? dh : h;
 
     // GL: copy the window back buffer into the shared texture (flip Y for D3D)
     if (!p_wglDXLockObjectsNV(g_interop, 1, &g_sharedH)) { logf("lock failed"); return; }
@@ -314,9 +366,15 @@ static void present_frame() {
     glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &prevRead); glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &prevDraw);
     p_glBindFramebuffer(GL_DRAW_FRAMEBUFFER, g_fbo);
     p_glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_tex, 0);
+    if (bw != w || bh != h) {   // partial frame: black outside the drawable
+        GLfloat cc0[4]; GLboolean cm0[4]; glGetFloatv(GL_COLOR_CLEAR_VALUE, cc0); glGetBooleanv(GL_COLOR_WRITEMASK, cm0);
+        GLboolean sc0 = glIsEnabled(GL_SCISSOR_TEST); if (sc0) glDisable(GL_SCISSOR_TEST);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE); glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
+        glColorMask(cm0[0], cm0[1], cm0[2], cm0[3]); glClearColor(cc0[0], cc0[1], cc0[2], cc0[3]); if (sc0) glEnable(GL_SCISSOR_TEST);
+    }
     p_glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
     glReadBuffer(GL_BACK);
-    p_glBlitFramebuffer(0, 0, w, h, 0, h, w, 0, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    p_glBlitFramebuffer(0, 0, bw, bh, 0, h, bw, h - bh, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     {   // force alpha = 1: the game leaves translucent pixels in its back buffer (GL swap ignores them,
         // a flip-model swapchain in HDR mode can composite them and show the desktop through)
         GLfloat cc[4]; GLboolean cm[4]; glGetFloatv(GL_COLOR_CLEAR_VALUE, cc); glGetBooleanv(GL_COLOR_WRITEMASK, cm);
@@ -337,8 +395,11 @@ static void present_frame() {
     wait_for_cap();
     UINT sync = (g_interval == 0) ? 0 : 1;
     UINT flags = (sync == 0 && g_tearing) ? DXGI_PRESENT_ALLOW_TEARING : 0;
+    if (g_frames < (unsigned)g_dump_frames) dump_frame(g_frames);
     HRESULT hr = g_sc->Present(sync, flags);
-    if (FAILED(hr)) { logf("Present failed %08lx", hr); if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) g_disabled = true; }
+    static HRESULT lasthr = S_OK;
+    if (hr != lasthr) { logf("Present status %08lx at frame %lu", hr, (unsigned long)g_frames); lasthr = hr; }
+    if (FAILED(hr)) { if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) g_disabled = true; }
     if (++g_frames == 1) logf("first frame presented");
 }
 
@@ -346,6 +407,7 @@ extern "C" {
 
 __declspec(dllexport) void SDL_GL_SwapWindow(SDL_Window* win) {
     load_real();
+    g_win = win;
     if (getenv("GOO_PRESENT_OFF")) g_disabled = true;
     if (!g_disabled && !g_inited) { g_inited = true; read_settings(); if (!init_present()) { g_disabled = true; logf("present disabled, using GL swap"); } }
     if (g_disabled) { if (real_SwapWindow) real_SwapWindow(win); return; }

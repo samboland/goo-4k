@@ -71,6 +71,9 @@ g_st_marked: .long 0            # glyph images marked
 g_st_upl:    .long 0            # marked images reaching upload_hook with no texture yet
 g_st_mip:    .long 0            # mipmaps generated
 g_st_nogen:  .long 0            # glGenerateMipmap pointer was null
+g_st_allupl: .long 0            # every texture upload through upload_hook (glyph or not)
+g_st_animhold: .long 0          # anim_hook rate-guard holds
+g_st_animrate: .float 0         # |rate| of the last held animation
 g_softmark:  .asciz "GOO4KSOFT"
              .byte 0, 0
 g_soften:    .long 1            # glyph_soften radius in texels (outer alpha edge only), 0 = off (shim writes from ini font_soften)
@@ -689,13 +692,17 @@ anim_found:
     movaps xmm5, xmm4
     andps xmm5, xmmword ptr [rip+g_absmask]
     ucomiss xmm5, dword ptr [rip+g_anim_max]
-    ja    anim_out                      # loop wrap or reset: hold
+    ja    anim_hold                     # loop wrap or reset: hold
     movss xmm5, dword ptr [rip+g_one]   # interpolate: t = last - (1 - alpha) * rate
     subss xmm5, dword ptr [rip+g_alpha]
     mulss xmm4, xmm5
     subss xmm1, xmm4
     xorps xmm4, xmm4
     maxss xmm1, xmm4                    # never below zero
+anim_hold:
+    inc   dword ptr [rip+g_st_animhold]
+    movss dword ptr [rip+g_st_animrate], xmm5
+    jmp   anim_out
 anim_out:
     push  rbx                           # relocated prologue of ANIM_EVAL
     push  rbp
@@ -785,6 +792,7 @@ glyph_out:
 # texels and rotated text looked jagged. Flag 64.
 .globl upload_hook
 upload_hook:
+    inc   dword ptr [rip+g_st_allupl]
     test  dword ptr [rip+g_flags], 64
     jz    upload_cont
     cmp   dword ptr [rcx+0x5c], GLYPH_MAGIC
