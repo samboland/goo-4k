@@ -91,6 +91,11 @@ for s in (0x1400b15bc,0x1400b08ea):                  # call RASTER -> raster_wra
 # --- SDL2Image upload: do not clamp GL_TEXTURE_MAX_LEVEL to 0 (pname 0x813d -> 0x813c, a redundant BASE_LEVEL=0);
 #     glyph textures get mipmaps after the upload, and raising the cap afterwards forced a reallocation per glyph
 o=va2off(0x1400c65d3); assert d[o:o+5]==bytes.fromhex('ba3d810000'), d[o:o+5].hex(); d[o+1]=0x3c
+# --- fragment shader: depth-writing draws (uniform alpha=1: level terrain layers) discard fragments below this
+#     alpha; goo ball shadows and glows are depth-tested against that outline. Stock 1/255 makes the outline the
+#     art's alpha>0 extent, which with upscaled art is the model's haze; 0.25 follows the real edge. Same length.
+i=d.find(b'outColor.a < (1.0 / 255.0)'); assert i>0 and d.find(b'outColor.a < (1.0 / 255.0)',i+1)<0
+d[i+13:i+26]=b'(0.25)       '; assert d[i:i+26]==b'outColor.a < (0.25)       '
 # --- sanity: stock tick rate, stock time scale ---
 assert d[va2off(0x1400ab237)]==0x32
 assert d[va2off(0x140089020):va2off(0x140089020)+8]==bytes.fromhex('48c747500000803f')

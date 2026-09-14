@@ -76,6 +76,7 @@ In place, 123 bytes:
 | 0x1400b0ade | glyph rasteriser: `bitmap_left` read -> `jmp bearing_hook` (11 bytes relocated) |
 | 0x1400a1170, 0x1400a13b0 | `Font::Font`, `Font::~Font` prologues -> `fontctor_hook`, `fontdtor_hook` (10 bytes relocated) |
 | 0x1400b15bc, 0x1400b08ea | `call` glyph rasteriser -> `raster_wrap` (timing) |
+| shader text in `.rdata` | fragment shader `outColor.a < (1.0 / 255.0)` -> `(0.25)`: the depth outline of the level's terrain layers (uniform `alpha` = 1) that goo ball shadows and glows are depth-tested against follows the art's 25% alpha contour instead of its alpha>0 extent, which with upscaled art is the model's haze |
 | 0x1400c65d3+1 | `SDL2Image` upload: `GL_TEXTURE_MAX_LEVEL` clamp turned into a redundant `GL_TEXTURE_BASE_LEVEL` store (0x813d -> 0x813c) |
 
 Appended: the `.goo` section (about 11 KB) from `cave.s`:
