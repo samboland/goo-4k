@@ -70,6 +70,7 @@ if a.textures:
             # tiny images (<= 32 px: stretched squares, faders, pixels) keep the stock file: the model makes
             # them noisy and shifts their alpha, which shows as colour splotches on dark screens (HDR).
             # flat-colour images of any size keep the upscaled alpha but get their exact colour back.
+            if rel.as_posix() in ('images/cursor_circle', 'images/cursor_text'): continue   # 24 stacked trail copies show any edge drift: stock stays
             src2x = stock / 'game/res' / rel.parent / (rel.name + '@2x.png'); flat = None
             if src2x.exists():
                 import numpy as np; from PIL import Image
