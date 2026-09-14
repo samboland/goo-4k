@@ -31,6 +31,8 @@
 .set GL_GENMIP,  0x140367b20    # GL function table (GetProcAddress at startup): glGenerateMipmap
 .set GL_BINDTEX, 0x140368550    # glBindTexture
 .set GL_TEXPARI, 0x140368458    # glTexParameteri
+.set MARGIN_BACK, 0x1400b067f   # face setup, after the margin stores (FUN_1400b0110)
+.set BEARING_BACK, 0x1400b0ae9  # glyph rasteriser, after bitmap_left -> float (FUN_1400b0960)
 .set BASE, 0x140398000
 .set ENTRY_SHIFT, 17            # 4096 bodies * 32 bytes per world slot
 .set ANIM_MAX, 1024             # tracked keyframe animation objects (32 bytes each)
@@ -67,6 +69,9 @@ g_st_marked: .long 0            # glyph images marked
 g_st_upl:    .long 0            # marked images reaching upload_hook with no texture yet
 g_st_mip:    .long 0            # mipmaps generated
 g_st_nogen:  .long 0            # glGenerateMipmap pointer was null
+g_padmark:   .asciz "GOO4KPAD"
+             .byte 0, 0, 0
+g_glyph_pad: .long 8            # extra transparent texels around every glyph bitmap (shim writes from ini font_pad)
 g_flagmark:  .asciz "GOO4KFLAGS"
              .byte 0
 g_flags:     .long 0xffffffff   # 1 bodies, 2 clock, 4 keyframe anims, 8 camera, 16 cursor, 32 particles, 64 font mipmaps (shim writes from ini)
@@ -814,3 +819,30 @@ upload_cont:                            # relocated prologue, then the stock fun
     mov   [rsp+8], rbx
     mov   [rsp+0x10], rbp
     jmp   _start+(UPLOAD_BACK-BASE)
+
+# --- margin_hook: detour at 0x1400b0674 in the face setup. Relocated:
+#   mov [rsi+0x5c],ecx ; mov edx,[rsi+0x60] ; add edx,ecx ; mov [rsi+0x64],edx
+# ecx = max(outlineSize, glowSize). face+0x64 is the glyph bitmap margin (bitmap = glyph + 2*margin,
+# glyph placed at +margin); face+0x5c is added to bitmap_top for the vertical bearing, so growing both
+# keeps the baseline. Stock margin = max(outline, glow) + 1, so the outline stroke (radius outline)
+# ends one texel from the bitmap edge, and the textured quad's edge cuts it: a geometric, unfiltered
+# staircase on rotated text. With the pad the outline boundary is interior and filtered like the fill.
+.globl margin_hook
+margin_hook:
+    add   ecx, dword ptr [rip+g_glyph_pad]
+    mov   [rsi+0x5c], ecx
+    mov   edx, [rsi+0x60]
+    add   edx, ecx
+    mov   [rsi+0x64], edx
+    jmp   _start+(MARGIN_BACK-BASE)
+
+# --- bearing_hook: detour at 0x1400b0ade in the rasteriser. Relocated: movd xmm0,[rbx+0x90] ; cvtdq2ps.
+# The horizontal bearing is plain bitmap_left (the engine never compensates the margin horizontally),
+# so subtract the pad to keep glyph ink where it was. eax is overwritten by the next instruction.
+.globl bearing_hook
+bearing_hook:
+    mov   eax, [rbx+0x90]
+    sub   eax, dword ptr [rip+g_glyph_pad]
+    movd  xmm0, eax
+    cvtdq2ps xmm0, xmm0
+    jmp   _start+(BEARING_BACK-BASE)

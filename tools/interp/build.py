@@ -63,6 +63,8 @@ jmp_patch(0x14008a920,'40534883ec20',syms['time_hook'])                 # Wog::t
 jmp_patch(0x140029e10,'405355574881ec90000000',syms['anim_hook'])       # evaluator prologue, relocated in cave
 jmp_patch(0x1400b109d,'488945b0488b5520',syms['glyph_hook'])          # after glyph createImage, relocated in cave
 jmp_patch(0x1400c6520,'48895c240848896c2410',syms['upload_hook'])   # SDL2Image upload prologue, relocated in cave
+jmp_patch(0x1400b0674,'894e5c8b566003d1895664',syms['margin_hook'])  # face setup: glyph bitmap margin, relocated in cave
+jmp_patch(0x1400b0ade,'660f6e83900000000f5bc0',syms['bearing_hook']) # rasteriser: bitmap_left -> float, relocated in cave
 # --- two-suffix loader: try "@4x.png" (scale 0.25), fall back to "@2x.png" (scale 0.5) ---
 o=va2off(0x1402b8370); assert d[o:o+8]==b'@2x.png'+bytes(1), bytes(d[o:o+8]); d[o:o+8]=b'@4x.png'+bytes(1)
 sfx2=syms['g_sfx2x']                                  # "@2x.png" in the .goo section

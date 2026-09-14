@@ -88,6 +88,7 @@ static LARGE_INTEGER g_qpf = {}, g_last_present = {};
 
 static int g_interp_flags = -1;       // ini: interp=<mask>; -1 leaves the exe default (all on)
 static bool g_debug_keys = false;     // ini: debug=1 enables F5
+static int g_font_pad = 8;            // ini: font_pad, extra transparent texels around glyph bitmaps (0 = stock)
 static void apply_flags();
 
 // goopresent.ini next to the config: fps_cap=<n> (0 = off). Env GOO_FPS_CAP overrides.
@@ -96,7 +97,7 @@ static void read_settings() {
     char path[MAX_PATH]; DWORD n = GetEnvironmentVariableA("LOCALAPPDATA", path, MAX_PATH);
     if (n && n < MAX_PATH) {
         strcat_s(path, "\\2DBoy\\WorldOfGoo\\goopresent.ini");
-        if (FILE* f = fopen(path, "r")) { char line[256]; while (fgets(line, sizeof line, f)) { double v; int o; if (sscanf(line, " fps_cap = %lf", &v) == 1 || sscanf(line, " fps_cap=%lf", &v) == 1) cap = v; if (sscanf(line, " overlay = %d", &o) == 1 || sscanf(line, " overlay=%d", &o) == 1) g_overlay = o != 0; if (sscanf(line, " interp = %d", &o) == 1 || sscanf(line, " interp=%d", &o) == 1) g_interp_flags = o; if (sscanf(line, " debug = %d", &o) == 1 || sscanf(line, " debug=%d", &o) == 1) g_debug_keys = o != 0; } fclose(f); }
+        if (FILE* f = fopen(path, "r")) { char line[256]; while (fgets(line, sizeof line, f)) { double v; int o; if (sscanf(line, " fps_cap = %lf", &v) == 1 || sscanf(line, " fps_cap=%lf", &v) == 1) cap = v; if (sscanf(line, " overlay = %d", &o) == 1 || sscanf(line, " overlay=%d", &o) == 1) g_overlay = o != 0; if (sscanf(line, " interp = %d", &o) == 1 || sscanf(line, " interp=%d", &o) == 1) g_interp_flags = o; if (sscanf(line, " debug = %d", &o) == 1 || sscanf(line, " debug=%d", &o) == 1) g_debug_keys = o != 0; if (sscanf(line, " font_pad = %d", &o) == 1 || sscanf(line, " font_pad=%d", &o) == 1) g_font_pad = o; } fclose(f); }
     }
     if (const char* e = getenv("GOO_FPS_CAP")) cap = atof(e);
     g_cap_period = cap > 0 ? 1.0 / cap : 0;
@@ -160,6 +161,7 @@ static void apply_flags() {
     DWORD* flags = (DWORD*)(m + 12);
     if (g_interp_flags >= 0) *flags = (DWORD)g_interp_flags;
     logf("interp flags = %lu (1 bodies, 2 clock, 4 anims, 8 camera, 16 cursor, 32 particles, 64 font mipmaps)", *flags);
+    if (BYTE* pm = find_goo_marker("GOO4KPAD")) { *(int*)(pm + 12) = g_font_pad < 0 ? 0 : g_font_pad; logf("font_pad = %d", g_font_pad); }
 }
 
 static void find_exe_stamp(char* out, size_t n) {
