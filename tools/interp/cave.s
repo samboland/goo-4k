@@ -114,7 +114,7 @@ g_padmark:   .asciz "GOO4KPAD"
 g_glyph_pad: .long 8            # extra transparent texels around every glyph bitmap (shim writes from ini font_pad)
 g_flagmark:  .asciz "GOO4KFLAGS"
              .byte 0
-g_flags:     .long 0xffffffff   # 1 bodies, 2 clock, 4 keyframe anims, 8 camera, 16 cursor, 32 particles, 64 font mipmaps (shim writes from ini)
+g_flags:     .long 0xffffffff   # 1 bodies, 2 clock, 4 keyframe anims, 8 camera, 16 cursor, 32 particles, 64 font mipmaps, 128 art mipmaps (shim writes from ini)
 g_tick:      .long 0
 g_noclock:   .long 0
 g_anim_n:    .long 0
@@ -849,10 +849,14 @@ glyph_out:
 .globl upload_hook
 upload_hook:
     inc   dword ptr [rip+g_st_allupl]
-    test  dword ptr [rip+g_flags], 64
-    jz    upload_cont
     cmp   dword ptr [rcx+0x5c], GLYPH_MAGIC
-    jne   upload_cont
+    jne   1f
+    test  dword ptr [rip+g_flags], 64       # glyph: pad + soften + mipmaps
+    jz    upload_cont
+    jmp   2f
+1:  test  dword ptr [rip+g_flags], 128      # any other texture: mipmaps + trilinear (4x art is drawn minified)
+    jz    upload_cont
+2:
     cmp   dword ptr [rcx+0x40], 0       # already has a texture
     jne   upload_cont
     cmp   qword ptr [rcx+0x60], 0       # no pixels
@@ -873,7 +877,10 @@ upload_hook:
     mov   [rip+g_st_tin], rax
     mov   rcx, [rsp+0x30]
     mov   r8d, dword ptr [rip+g_soften]
-    test  r8d, r8d
+    cmp   dword ptr [rcx+0x5c], GLYPH_MAGIC
+    je    3f
+    xor   r8d, r8d                      # art: no softening
+3:  test  r8d, r8d
     jz    2f
     mov   rcx, [rcx+0x60]               # pixels (square RGBA8)
     mov   rax, [rsp+0x30]

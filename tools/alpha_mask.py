@@ -27,12 +27,29 @@ def mask_alpha(stock_rgba: np.ndarray, up_rgba: np.ndarray) -> tuple[np.ndarray,
     out[..., 3][kill] = 0
     return out, int(kill.sum())
 
+def bleed_rgb(rgba: np.ndarray, iterations: int = 8) -> np.ndarray:
+    """Copy edge colours outward into fully transparent texels (alpha 0), one texel per iteration, so
+    mipmap averaging and bilinear filtering never mix in a wrong colour at sprite edges."""
+    out = rgba.copy(); a = out[..., 3] > 0
+    for _ in range(iterations):
+        if a.all(): break
+        rgb = out[..., :3].astype(np.uint16); cnt = a.astype(np.uint16)
+        acc = np.zeros_like(rgb); n = np.zeros_like(cnt)
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            sr = np.roll(rgb, (dy, dx), axis=(0, 1)); sa = np.roll(cnt, (dy, dx), axis=(0, 1))
+            acc += sr * sa[..., None]; n += sa
+        fill = (~a) & (n > 0)
+        out[..., :3][fill] = (acc[fill] // n[fill][:, None]).astype(np.uint8)
+        a = a | fill
+    return out
+
 def process(stock_path: pathlib.Path, up_path: pathlib.Path, out_path: pathlib.Path) -> int:
     s = np.asarray(Image.open(stock_path).convert('RGBA')); u = np.asarray(Image.open(up_path).convert('RGBA'))
     if s.shape[0] * 2 != u.shape[0] or s.shape[1] * 2 != u.shape[1]: return -1
     if not (s[..., 3] == 0).any(): return 0            # fully opaque: nothing to mask
     out, n = mask_alpha(s, u)
-    if n: Image.fromarray(out).save(out_path)
+    out = bleed_rgb(out)
+    Image.fromarray(out).save(out_path)
     return n
 
 if __name__ == '__main__':

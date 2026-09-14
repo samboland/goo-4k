@@ -170,7 +170,7 @@ static void apply_flags() {
     if (!m) { logf("no GOO4KFLAGS marker in exe"); return; }
     DWORD* flags = (DWORD*)(m + 12);
     if (g_interp_flags >= 0) *flags = (DWORD)g_interp_flags;
-    logf("interp flags = %lu (1 bodies, 2 clock, 4 anims, 8 camera, 16 cursor, 32 particles, 64 font mipmaps)", *flags);
+    logf("interp flags = %lu (1 bodies, 2 clock, 4 anims, 8 camera, 16 cursor, 32 particles, 64 font mipmaps, 128 art mipmaps)", *flags);
     if (BYTE* pm = find_goo_marker("GOO4KPAD")) { *(int*)(pm + 12) = g_font_pad < 0 ? 0 : g_font_pad; logf("font_pad = %d", g_font_pad); }
     if (BYTE* sm = find_goo_marker("GOO4KSOFT")) { *(int*)(sm + 12) = g_font_soften < 0 ? 0 : g_font_soften; logf("font_soften = %d", g_font_soften); }
     if (BYTE* wm = find_goo_marker("GOO4KWARM")) { *(int*)(wm + 12) = g_font_warm ? 1 : 0; logf("font_warm = %d", g_font_warm); }
