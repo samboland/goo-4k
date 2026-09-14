@@ -115,6 +115,12 @@ Appended: the `.goo` section (about 11 KB) from `cave.s`:
   and UVs ending at the bitmap size). `margin_hook` adds `font_pad` texels (`GOO4KPAD` marker +12,
   default 8) to the margin and to face+0x5c (the vertical bearing compensation), `bearing_hook`
   subtracts it from `bitmap_left` so glyph ink stays put. Bitmaps grow by 2 x pad per axis.
+- `glyph_soften` (soften.c, C compiled freestanding into the section): before a glyph's upload,
+  widens the bitmap's outer alpha edge by a box blur of `font_soften` texels (`GOO4KSOFT` marker
+  +12, default 2) and extends the edge colour into the newly covered texels; RGB inside the opaque
+  area is untouched, so the fill/outline boundary stays as FreeType drew it. Needs the pad above
+  for room. Without it the outline's outer ramp is one texel (0.3 px at 4K) and straight stems on
+  rotated text still show the one-pixel staircase of the mipmap filter alone.
 - Data markers read or written by the shim: `GOO4K:` build stamp, `GOO4KFLAGS` (+12: feature
   mask), `GOO4KDEBUG` (+12: command/status word).
 

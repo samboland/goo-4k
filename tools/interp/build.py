@@ -27,7 +27,10 @@ with tempfile.TemporaryDirectory() as t:
     stamp=datetime.datetime.now().strftime('%m-%d %H:%M')+' '+rev
     (t/'cave.s').write_text((here/'cave.s').read_text().replace('BUILD_STAMP',stamp))
     subprocess.check_call(['as','--64','-o',str(t/'c.o'),str(t/'cave.s')])
-    subprocess.check_call(['ld',f'-Ttext={SEC_VA:#x}','-e','_start','-o',str(t/'c.elf'),str(t/'c.o')],stderr=subprocess.DEVNULL)
+    subprocess.check_call(['gcc','-c','-O2','-ffreestanding','-fno-builtin','-fno-tree-loop-distribute-patterns','-fno-stack-protector','-fno-asynchronous-unwind-tables','-mno-stack-arg-probe','-fno-jump-tables','-o',str(t/'soften.o'),str(here/'soften.c')])
+    und=[l for l in subprocess.check_output(['nm',str(t/'soften.o')]).decode().splitlines() if ' U ' in l]
+    assert not und, 'soften.c must be freestanding: '+' '.join(und)
+    subprocess.check_call(['ld',f'-Ttext={SEC_VA:#x}','-e','_start','-o',str(t/'c.elf'),str(t/'c.o'),str(t/'soften.o')],stderr=subprocess.DEVNULL)
     subprocess.check_call(['objcopy','-O','binary','-j','.text',str(t/'c.elf'),str(t/'c.bin')])
     blob=(t/'c.bin').read_bytes()
     syms={l.split()[2]:int(l.split()[0],16) for l in subprocess.check_output(['nm',str(t/'c.elf')]).decode().splitlines() if len(l.split())==3}

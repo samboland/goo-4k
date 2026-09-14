@@ -31,6 +31,8 @@
 .set GL_GENMIP,  0x140367b20    # GL function table (GetProcAddress at startup): glGenerateMipmap
 .set GL_BINDTEX, 0x140368550    # glBindTexture
 .set GL_TEXPARI, 0x140368458    # glTexParameteri
+.set C_MALLOC,   0x140285550    # CRT malloc (the glyph rasteriser's)
+.set C_FREE,     0x140284494    # CRT free
 .set MARGIN_BACK, 0x1400b067f   # face setup, after the margin stores (FUN_1400b0110)
 .set BEARING_BACK, 0x1400b0ae9  # glyph rasteriser, after bitmap_left -> float (FUN_1400b0960)
 .set BASE, 0x140398000
@@ -69,6 +71,9 @@ g_st_marked: .long 0            # glyph images marked
 g_st_upl:    .long 0            # marked images reaching upload_hook with no texture yet
 g_st_mip:    .long 0            # mipmaps generated
 g_st_nogen:  .long 0            # glGenerateMipmap pointer was null
+g_softmark:  .asciz "GOO4KSOFT"
+             .byte 0, 0
+g_soften:    .long 2            # glyph_soften radius in texels (outer alpha edge only), 0 = off (shim writes from ini font_soften)
 g_padmark:   .asciz "GOO4KPAD"
              .byte 0, 0, 0
 g_glyph_pad: .long 8            # extra transparent texels around every glyph bitmap (shim writes from ini font_pad)
@@ -794,9 +799,20 @@ upload_hook:
     inc   dword ptr [rip+g_st_nogen]
     jmp   upload_cont
 1:
-    sub   rsp, 0x28                     # entry rsp%16==8 -> aligned for calls
-    mov   [rsp+0x20], rcx
-    call  upload_cont                   # stock upload, leaves the texture bound
+    sub   rsp, 0x38                     # entry rsp%16==8 -> aligned for calls; +0x30 image, +0x20 5th arg
+    mov   [rsp+0x30], rcx
+    mov   r8d, dword ptr [rip+g_soften]
+    test  r8d, r8d
+    jz    2f
+    mov   rcx, [rcx+0x60]               # pixels (square RGBA8)
+    mov   rax, [rsp+0x30]
+    mov   edx, [rax+0x4c]               # size
+    lea   r9, [rip+_start+(C_MALLOC-BASE)]
+    lea   rax, [rip+_start+(C_FREE-BASE)]
+    mov   [rsp+0x20], rax
+    call  glyph_soften                  # widen the outer alpha edge (soften.c); needs the bitmap pad for room
+    mov   rcx, [rsp+0x30]
+2:  call  upload_cont                   # stock upload, leaves the texture bound
     mov   ecx, 0xde1
     mov   edx, eax
     call  qword ptr [rip+_start+(GL_BINDTEX-BASE)]
@@ -811,9 +827,9 @@ upload_hook:
     mov   r8d, 0x2703                   # GL_LINEAR_MIPMAP_LINEAR
     call  qword ptr [rip+_start+(GL_TEXPARI-BASE)]
     inc   dword ptr [rip+g_st_mip]
-    mov   rcx, [rsp+0x20]
+    mov   rcx, [rsp+0x30]
     mov   eax, [rcx+0x40]
-    add   rsp, 0x28
+    add   rsp, 0x38
     ret
 upload_cont:                            # relocated prologue, then the stock function
     mov   [rsp+8], rbx
