@@ -5,16 +5,32 @@ Native-resolution rendering, 4x-native art, and high-refresh motion for the Stea
 
 This project is not affiliated with 2D Boy or Tomorrow Corporation. The repository contains no game files in and of itself.
 
+## Quick start
+
+With the game closed, open PowerShell, paste and enter:
+
+```
+irm https://raw.githubusercontent.com/samboland/goo-4k/main/get.ps1 | iex
+```
+
+It finds your Steam install, asks before touching it, backs up what it changes, and offers the
+texture pack. Launch from Steam as usual afterwards. To remove it, run the same command and pick
+remove, or use Steam's verify integrity of game files.
+
 ## What it does
 
 - **Native framebuffer:** The game renders into an offscreen framebuffer; the installer sets it
   to your display size instead of the stock 1600x900.
 - **4x-native art:** A texture pack of every shipped image, upscaled 2x from the remaster's own
   2x assets with .derpy's [StarSample](https://openmodeldb.info/models/2x-StarSample-V2-HQ) model. The loader is patched to read `name@4x.png` when present
-  and fall back to the stock `name@2x.png`, so the pack is purely additive.
+  and fall back to the stock `name@2x.png`, so the pack is purely additive. Every texture gets
+  mipmaps, so the art filters cleanly at any zoom.
 - **Smooth motion at any refresh rate:** The simulation stays at the stock 50 Hz, bit-for-bit.
   Between ticks, drawn positions of every physics body, the camera, the cursor and the
-  clock-driven and keyframe animations are interpolated by the frame's sub-tick fraction.
+  clock-driven and keyframe animations are interpolated by the frame's sub-tick fraction;
+  particles are extrapolated along their velocity.
+- **Sharp text:** Fonts are rasterised at 4x their stock size and drawn back down through
+  mipmaps, so text is crisp at 4K and stays smooth at an angle.
 - **Modern presentation:** A proxy `SDL2.dll` presents the OpenGL frame through a DirectX 11
   flip-model swapchain (`WGL_NV_DX_interop2`). VRR,
   tearing-free vsync, and DirectX overlays such as Special K (HDR retrofit confirmed working).
@@ -32,8 +48,8 @@ irm https://raw.githubusercontent.com/samboland/goo-4k/main/get.ps1 | iex
 ```
 
 It downloads the latest release, locates the Steam install, verifies the files are the expected
-build, backs up `WorldOfGoo.exe` and `SDL2.dll` to `goo4k-backup`, patches them, installs the
-shim and the texture pack, and sets the framebuffer and vsync lines in the game config. Then
+build, backs up `WorldOfGoo.exe`, `SDL2.dll` and `resources.xml` to `goo4k-backup`, patches them,
+installs the shim and the texture pack, and sets the framebuffer and vsync lines in the game config. Then
 launch from Steam as usual. It asks before touching anything: which folder, whether you want the
 texture pack, and, if goo-4k is already installed, whether to update or remove it. For scripted use
 the prompts can be skipped:
@@ -58,7 +74,10 @@ extra files and stay); rerun the installer afterwards.
 | --- | --- | --- |
 | `fps_cap` | 0 | Frame cap for VRR setups, e.g. `236` on a 240 Hz panel. 0 = none. |
 | `overlay` | 0 | `1` shows the build stamp at the top left. |
-| `interp` | 31 | Bitmask of interpolation features: 1 bodies, 2 clock, 4 keyframe animations, 8 camera, 16 cursor. |
+| `interp` | 127 | Bitmask of motion and text features: 1 bodies, 2 clock, 4 keyframe animations, 8 camera, 16 cursor, 32 particles, 64 font mipmaps, 128 art mipmaps. |
+| `font_soften` | 1 | Width in texels of the antialiasing ramp added to the outer edge of text outlines. 0 = off. |
+| `font_warm` | 1 | Rasterise the fonts' character sets during the first seconds instead of on first use (removes the hitch on first hover). |
+| `font_pad` | 8 | Transparent texels added around each glyph bitmap so the text outline's edge is filtered like the fill. 0 = stock. |
 | `debug` | 0 | `1` enables F5, which spawns an unlock-burst effect at the camera (testing aid). |
 
 Game config (`config.ini` in the same folder): `vsync = -1` is adaptive (synced present, no
@@ -67,9 +86,9 @@ The shim writes `goopresent.log` next to these files.
 
 ## How it works
 
-The exe is changed in 123 bytes at 18 places (header, five call redirects, three vtable slots,
-two function entries turned into jumps, and the loader's suffix strings and scale constants) plus
-an 11 KB section appended with the new code. Everything else lives in the proxy DLL.
+The exe is changed in 200 bytes at 30 places (header, seven call redirects, six vtable slots,
+eight jumps into the new code, and the loader's suffix strings and scale constants) plus a 40 KB
+section appended with the new code. Everything else lives in the proxy DLL.
 
 - **Loader.** The remaster's loader appends `@2x.png` and stores a fixed 0.5 scale for such
   images. The patch makes the first attempt `@4x.png` at 0.25 and the fallback `@2x.png` at 0.5.
@@ -100,7 +119,9 @@ sh tools/present/build.sh                                # proxy SDL2.dll (shim)
 python tools/pack/build_pack.py [--textures <batch out dirs>]
 ```
 
-`build_pack.py` applies the asset-scale patch to the stock exe, runs `tools/interp/build.py`
+`build_pack.py` reads the stock files from the Steam folder; with the mod installed there, point it at
+stock copies instead (`--stock work/stock`, a folder with `Win64/WorldOfGoo.exe`, `Win64/SDL2.dll`,
+`game/properties/resources.xml` from `goo4k-backup` and `game/res`). It applies the asset-scale patch to the stock exe, runs `tools/interp/build.py`
 (assembles `cave.s`, appends the `.goo` section, installs the hooks), patches the stock SDL2.dll
 with `tools/sdl2_patch.py --no-minimize`, diffs stock against patched into manifests, and writes
 `dist/goo4k-<version>/` with the installer scripts. With `--textures` it also writes the texture
@@ -124,7 +145,7 @@ docs/ENGINE.md   reverse-engineering notes and addresses
 
 ## Known limitations
 
-- Particle effects and the cursor trail samples update at the stock 50 Hz by design.
+- The cursor trail samples update at the stock 50 Hz by design.
 - Interpolated positions lag the simulation by one tick (20 ms); the simulation itself is unchanged.
 - 4x textures are padded to square power-of-two sizes by the engine; a 4096-wide background is a
   64 MB texture. Expect roughly 1 GB of VRAM in busy levels.
@@ -138,7 +159,7 @@ covered; the texture pack is a derivative of their art and is distributed separa
 
 ## Credits
 
-World of Goo by 2D Boy; the remaster by Tomorrow Corporation. Upscaling model:
+World of Goo by 2D Boy, 2019 remaster by Tomorrow Corporation. Upscaling model:
 [2x StarSample V2 HQ](https://openmodeldb.info/models/2x-StarSample-V2-HQ) by .derpy. Built with
 chaiNNer, Ghidra, MinGW-w64 and PresentMon.
 
